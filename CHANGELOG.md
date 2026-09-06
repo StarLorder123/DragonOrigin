@@ -4,6 +4,8 @@
 
 ### Documentation
 
+- Add repository README (`README.md`)
+- Add HTTP protocol upgrade notes (Upgrade header, WebSocket handshake, Java/Netty/Node.js examples) to `pages/VSCode解析.md`
 - Add VSCode architecture overview note (`pages/VSCode解析.md`)
 - Add gulp build tool note covering Vinyl/tasks/globs and VSCode's win32 packaging tasks (`pages/gulp构建工具.md`)
 - Add daily journal entry for 2026-09-06 (`journals/2026_09_06.md`)
