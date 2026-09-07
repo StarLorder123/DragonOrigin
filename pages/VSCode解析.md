@@ -186,4 +186,155 @@
 - 通常使用的场景都是HTTP协议升级到WebSocket的场景。一般考虑的因素有如下：
 	- WebSocket 是基于 HTTP 的协议升级。WebSocket 是设计为在初始阶段通过 HTTP/1.1 或 HTTP/2 握手来建立连接的协议。这种设计使得 WebSocket 能够利用现有的 HTTP 基础设施进行连接，并在握手完成后切换到全双工通信模式。由于 WebSocket 是基于 HTTP 的，这意味着它可以更容易地通过现有的防火墙、代理和其他网络设备，而这些设备普遍支持 HTTP。这里就是考虑网络设备的兼容性、设备防火墙、代理服务器等等因素。
 	- 逐步回退机制。在某些情况下，WebSocket 可能无法通过特定的网络设备或防火墙，这时应用可以有回退机制。例如，应用可以首先尝试升级为 WebSocket，如果失败则可以回退到较为传统的轮询或长轮询的 HTTP 技术。通过 HTTP 开始连接，允许应用具备这种灵活性。
--
+- ## 2.2.  SSH的使用
+- 为了讲解的简单，我只讲解 “端口” 的转发。实际上，Unix Socket 也可以用相同的方式转发，请参考 Man Page。[https://man7.org/linux/man-pages/man1/ssh.1.html](https://man7.org/linux/man-pages/man1/ssh.1.html)
+- -D 动态转发
+  
+  ```
+  -D [_bind_address :_ ] _port_
+  ```
+	- 指定一个本地的动态应用级端口转发。
+	- 其工作方式是在本地分配一个 Socket 来监听端口，每当连接到这个端口时，连接通过 SSH 隧道被转发到远程主机上，然后远程主机根据协议确定该数据被转发到哪里。此时 SSH 充当 SOCKS 代理服务器。
+- -L 本地转发
+  
+  ```
+  -L [bind_address : ] port : host : hostport
+  -L [bind_address : ] port : remote_socket
+  -L local_socket : host : hostport
+  -L local_socket : remote_socket
+  ```
+	- 指定本地主机上给定的 TCP 端口或 Unix 套接字的连接将被转发到远程的给定主机和端口或 Unix 套接字上。
+	- 其工作方式是在本地分配一个 Socket 来监听本地的端口。每当连接到本地端口时，数据通过 SSH 隧道，被转发到远程主机的指定端口。
+	- 区分 -D 和 -L：本地转发中，数据被转发到指定端口，而动态转发根据协议内容自动确定数据去向。
+- -R 远程转发
+  
+  ```
+  -R [bind_address : ] port : host : hostport
+  -R [bind_address : ] port : local_socket
+  -R remote_socket : host : hostport
+  -R remote_socket : local_socket
+  ```
+	- 指定将远程（服务器）主机上给定 TCP 端口或 Unix 套接字的连接转发到本地端给定的主机和端口或 Unix 套接字。
+	- 其工作方式是远程主机上分配一个 Socket 监听远程的端口。每当连接到远程端口时，数据通过 SSH 隧道，被发送到本地主机的指定端口。
+- 区分 -L 和 -R：-L 是别人向本地发数据，数据会被转发到远程的特定端口；-R 是别人往远程发数据，数据会被转发到本地的特定端口。数据流向恰好相反。
+- 对于转发而言，还有几个选项比较有用：
+  
+  ```
+  -C: 使用数据压缩。
+  -f: 让 SSH 在后台运行，STDIN 会被重定向到 /dev/null。
+  -N: 让 SSH 不执行远程命令，即只负责转发端口。
+  ```
+- 所以一个常见的命令组合就可以是：
+  
+  ```
+  ssh -CNf -D 12345 user@IP
+  ```
+- ### 2.2.1.  关键方法解析
+- forwardOut方法
+	- 通过 SSH 隧道将本地机器的请求转发到远程服务器的某个端口，并模拟一个 HTTP 请求发送给远程服务器上的服务。
+	- 通常，它用于实现本地端口转发（Local Port Forwarding），也可以作为代理来连接到另一个服务器的地址和端口。
+	  
+	  ```
+	  conn.forwardOut(
+	  srcIP,         // 本地发起连接的 IP 地址
+	  srcPort,       // 本地发起连接的端口
+	  dstIP,         // 目标远程服务器的 IP 地址
+	  dstPort,       // 目标远程服务器的端口
+	  (err, stream) => {
+	   if (err) {
+	     console.log('Error forwarding:', err);
+	     return;
+	   }
+	  
+	   // stream 对象可以用于读写数据
+	   stream.write('Some data to send');
+	   stream.on('data', (data) => {
+	     console.log('Received data:', data);
+	   });
+	  }
+	  );
+	  ```
+- srcIP: 本地机器发起连接的 IP 地址，通常是 '127.0.0.1' 或 'localhost'。
+- srcPort: 本地发起连接的端口，通常是 0（表示任意端口）。
+- dstIP: 目标远程服务器的 IP 地址或主机名，这是你想要连接的目标地址。可以是 'localhost'，也可以是远程服务器的 IP 地址。
+- dstPort: 目标服务器的端口号，这是你希望转发到的远程服务器的端口。
+- callback: 回调函数，接收两个参数：
+	- err: 如果发生错误，将返回错误对象。
+	- stream: 一个 stream 对象，可以用于与目标服务器交换数据。
+- forwardIn方法
+	- 远程端口监听：通过 SSH 连接，远程服务器上的某个指定端口开始监听外部连接。将请求转发到本地：当远程服务器上的这个端口接收到请求时，SSH 隧道会将这些请求转发到本地机器。远程服务代理：可以让远程机器上的服务通过 SSH 隧道连接到本地机器的服务，起到代理作用。
+	  
+	  ```
+	  const { Client } = require('ssh2');
+	  
+	  const conn = new Client();
+	  conn.on('ready', () => {
+	  console.log('Client :: ready');
+	  
+	  // 监听远程服务器上的 8080 端口，并将流量转发到本地
+	  conn.forwardIn('0.0.0.0', 8080, (err, port) => {
+	   if (err) throw err;
+	   console.log(`Listening for connections on remote server at port ${port}`);
+	  });
+	  }).on('tcp connection', (details, accept, reject) => {
+	  console.log('Incoming TCP connection:', details);
+	  const stream = accept();
+	  stream.write('Hello from local machine!\n');
+	  stream.end();
+	  }).connect({
+	  host: 'remote-server.com',
+	  port: 22,
+	  username: 'user',
+	  password: 'password'
+	  });
+	  ```
+- conn.forwardIn('0.0.0.0', 8080, ...)：
+	- 这个方法告诉远程服务器在其 所有网络接口（0.0.0.0） 的 8080 端口上监听连接。
+	- 当远程服务器上的 8080 端口接收到请求时，这些请求会通过 SSH 隧道转发到本地。
+- tcp connection 事件：
+	- 当远程服务器的 8080 端口接收到连接时，ssh2 会触发 tcp connection 事件。这个事件的回调函数中包含请求连接的细节（如来源 IP 和端口）。
+	- 在回调中，调用 accept() 接受连接，然后可以像操作本地 stream 一样处理远程的 TCP 流。
+- 消息处理：
+	- 远程端口接收到的请求被接受后，流量会通过 SSH 隧道传递到本地。在这个例子中，服务器接收到连接后，会向连接返回一条消息 "Hello from local machine!"，然后关闭连接。
+- openssh_forwardOutStreamLocal方法
+	- 通过 SSH 隧道，将来自本地的 UNIX 套接字流转发到远程服务器的一个指定的 UNIX 套接字文件上。
+	- 允许你通过 SSH 来与远程服务器的 UNIX 套接字通信，就像是在本地访问一样。
+	  
+	  ```
+	  const { Client } = require('ssh2');
+	  
+	  const conn = new Client();
+	  conn.on('ready', () => {
+	  console.log('Client :: ready');
+	  
+	  // 转发本地 UNIX 套接字流
+	  conn.openssh_forwardOutStreamLocal('/var/run/myservice.sock', (err, stream) => {
+	   if (err) throw err;
+	  
+	   // 当成功连接远程 UNIX 套接字时，可以通过 stream 进行通信
+	   stream.on('close', () => {
+	     console.log('Stream :: close');
+	     conn.end(); // 关闭 SSH 连接
+	   }).on('data', (data) => {
+	     console.log('DATA: ' + data);
+	   });
+	  
+	   // 向远程服务发送一些数据
+	   stream.write('Hello remote service!');
+	  });
+	  
+	  }).connect({
+	  host: 'remote-server.com',
+	  port: 22,
+	  username: 'user',
+	  password: 'password'
+	  });
+	  ```
+- conn.openssh_forwardOutStreamLocal('/var/run/myservice.sock', ...)：
+	- 该方法尝试通过 SSH 隧道连接远程服务器上的 UNIX 套接字 /var/run/myservice.sock。
+	- 当连接成功后，回调函数会返回一个 stream 对象，通过它你可以向远程套接字服务发送数据或接收数据。
+- stream.write() 和 stream.on('data')：
+	- stream.write() 允许你向远程服务发送数据。
+	- stream.on('data') 监听远程服务发送回来的数据，并在控制台打印出来。
+- 关闭连接：
+	- 当数据传输结束后，调用 stream.on('close') 来处理流关闭事件，并最终关闭 SSH 连接。
