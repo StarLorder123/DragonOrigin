@@ -4,6 +4,8 @@
 
 ### Documentation
 
+- Add TypeScript basics note (`pages/TypeScript基础知识.md`) covering first script, basic types, variable declaration, operators
+- Link TypeScript basics note from new "编程语言基础" section in `pages/VSCode解析.md`
 - Add repository README (`README.md`)
 - Add HTTP protocol upgrade notes (Upgrade header, WebSocket handshake, Java/Netty/Node.js examples) to `pages/VSCode解析.md`
 - Add SSH port forwarding notes (-D/-L/-R forwarding, forwardOut/forwardIn/openssh_forwardOutStreamLocal methods) to `pages/VSCode解析.md`

@@ -402,3 +402,10 @@
   
   [https://www.51cto.com/article/742745.html](https://www.51cto.com/article/742745.html)
 -
+- # 3.  编程语言基础
+- VSCode源代码是使用的typescript写的。typescript和javascript有着非常密切的关系，因此需要前期有一些基本的语言的基础和习惯。
+- 比较重要的基础包括：TypeScript、Electron（基础框架）、Webpack（打包）、Nodejs事件循环机制、Promise、Gulp工具（自动化任务构建工具）等。
+- 其余还包括浏览器中的DOM、HTML等相关知识、计算机网络、操作系统、Linux、Pty（伪终端）等知识没有单独列出来介绍，需要的时候再捎带一些。
+- ## 3.1.  TypeScript基础
+- [[TypeScript基础知识]]
+-
