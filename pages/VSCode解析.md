@@ -408,4 +408,6 @@
 - 其余还包括浏览器中的DOM、HTML等相关知识、计算机网络、操作系统、Linux、Pty（伪终端）等知识没有单独列出来介绍，需要的时候再捎带一些。
 - ## 3.1.  TypeScript基础
 - [[TypeScript基础知识]]
+- ## 3.2.  Electron基础
+- [[Electron基础]]
 -
