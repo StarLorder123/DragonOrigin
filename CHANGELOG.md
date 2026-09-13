@@ -4,6 +4,7 @@
 
 ### Documentation
 
+- Add Promise note to `pages/VSCode解析.md` covering Promise states, basic usage, then/catch/finally, Promise.all and Promise.race
 - Add Node.js event loop note (`pages/Nodejs事件循环机制.md`) covering the six event loop phases, macro/micro task queues, phase details, and an async example walkthrough
 - Link Node.js event loop note from "编程语言基础" section in `pages/VSCode解析.md`
 - Add Webpack basics note (`pages/Webpack基础.md`) covering install, entry/output config, mode, html-webpack-plugin, webpack-dev-server, css/less loaders, and asset modules

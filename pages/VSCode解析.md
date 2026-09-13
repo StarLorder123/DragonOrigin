@@ -414,4 +414,46 @@
 - [[Webpack基础]]
 - ## 3.4.  Nodejs事件循环机制
 - [[Nodejs事件循环机制]]
+- ## 3.5.  Promise
+- Promise 对象是 JavaScript 的异步操作解决方案，为异步操作提供统一接口。它起到代理作用（proxy），充当异步操作与回调函数之间的中介，使得异步操作具备同步操作的接口。Promise 可以让异步操作写起来，就像在写同步操作的流程，而不必一层层地嵌套回调函数。
+- Promise 的设计思想是，所有异步任务都返回一个 Promise 实例。Promise 实例有一个then方法，用来指定下一步的回调函数。
+- ### 3.5.1.  Promise对象的状态
+- Promise 对象通过自身的状态，来控制异步操作。Promise 实例具有三种状态。
+	- 异步操作未完成（pending）
+	- 异步操作成功（fulfilled）
+	- 异步操作失败（rejected）
+- 上面三种状态里面，fulfilled和rejected合在一起称为resolved（已定型）。
+- 这三种的状态的变化途径只有两种。
+	- 从“未完成”到“成功”
+	- 从“未完成”到“失败”
+- 一旦状态发生变化，就凝固了，不会再有新的状态变化。这也是 Promise 这个名字的由来，它的英语意思是“承诺”，一旦承诺成效，就不得再改变了。这也意味着，Promise 实例的状态变化只可能发生一次。
+- 因此，Promise 的最终结果只有两种。
+	- 异步操作成功，Promise 实例传回一个值（value），状态变为fulfilled。
+	- 异步操作失败，Promise 实例抛出一个错误（error），状态变为rejected。
+- ### 3.5.2.  Promise的基本使用
+  
+  ```
+  const promise = new Promise((resolve, reject) => {
+  let status = true;
+  if (status) {
+    resolve('操作成功!');
+  } else {
+    reject('操作失败!');
+  }
+  });
+  
+  promise.then(res => {
+  console.log('成功结果：' + res);
+  }, error => {
+  console.log('失败结果：' + error);
+  
+  });
+  ```
+- ### 3.5.3.  Promise的进阶使用
+- Promise实例具有then方法，then方法是定义在原型对象Promise.prototype上的。它的作用前面说过，第一个回调函数是状态改变fufilled时调用的，第二个回调函数(可选)是状态改变rejected时调用的。
+- then方法的基础调用写法，可以写一个回调方法，来执行成功后的回调。then方法返回一个的是一个新的Promise实例，因此我们可以采用链式写法，即then方法后面再调用一个then方法。采用链式的then，可以指定一组按照次序调用的回调函数。这时，前一个回调函数，有可能返回的还是一个Promise对象（即有异步操作），这时后一个回调函数，就会等待该Promise对象的状态发生变化，才会被调用。
+- catch是用于指定发生错误的回调函数。Promise实例当状态改变为rejected状态或者操作失败抛出异常错误，就会被catch方法捕获。所以在Promise实例中reject方法等同于抛出错误。如果Promise的状态已经变成了resolved，再抛出错误无效。
+- finally方法用于指定不管Promis对象最后状态如何，都会执行的操作。该方法是 ES2018 引入标准的。
+- Promise.all方法用于将多个Promise实例，包装成一个新的Promise实例。在all方法中可以传递多个Promise对象，当所有的Promise对象状态都返回fufilled，才会返回fulfilled，否则返回rejected。
+- Promise.race方法同样是将多个Promise实例，包装成一个新的Promise实例。可以传递多个Promise对象作为参数，如果实例有一个实例率先改变状态，那么race的状态就会跟着改变。
 -
