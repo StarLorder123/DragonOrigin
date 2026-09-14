@@ -456,4 +456,135 @@
 - finally方法用于指定不管Promis对象最后状态如何，都会执行的操作。该方法是 ES2018 引入标准的。
 - Promise.all方法用于将多个Promise实例，包装成一个新的Promise实例。在all方法中可以传递多个Promise对象，当所有的Promise对象状态都返回fufilled，才会返回fulfilled，否则返回rejected。
 - Promise.race方法同样是将多个Promise实例，包装成一个新的Promise实例。可以传递多个Promise对象作为参数，如果实例有一个实例率先改变状态，那么race的状态就会跟着改变。
--
+- ## 3.6.  Gulp工具
+- [[gulp构建工具]]
+- ## 3.7.  IIFE(Immediately Invoked Functions Expressions)
+- ### 3.7.1.  简要介绍
+- JavaScript 中的立即调用函式 (IIFE，Immediately Invoked Function Expression)，指的是一种在定义时立即执行的匿名函式，通常用于创建一个局部作用域，避免全局污染。
+- 立即调用函数式的好处：
+	- 创建局部作用域：通过使用 IIFE 可以创建一个局部作用域，避免全局变量的污染。以下代码可以看到，在 IIFE 中，有一个局部变量 localVariable。 localVariable 只能在 IIFE 内访问，不能在 IIFE 外访问
+	  
+	  ```
+	  // Global scope
+	  var globalVariable = "global variable";
+	  
+	  (function () {
+	  // Local scope inside IIFE
+	  var localVariable = "local variable";
+	  console.log(localVariable); // local variable
+	  })();
+	  
+	  console.log(localVariable); // ReferenceError: localVariable is not defined
+	  console.log(globalVariable); // global variable
+	  ```
+	- 避免命名冲突：IIFE 可以为变量创建了一个单独的命名空间，避免函式名和变量名的冲突。
+	  
+	  ```
+	  // Global scope
+	  var globalVariable = "global variable";
+	  
+	  (function () {
+	  // Local scope inside IIFE
+	  var globalVariable = "local variable inside IIFE";
+	  console.log(globalVariable); // local variable inside the IIFE
+	  })();
+	  
+	  console.log(globalVariable); // global variable
+	  ```
+	- 模组化编程：IIFE 可以将代码分为独立的模组，方便了代码的管理和维护。
+- ### 3.7.2.  常用场景
+- 创建只使用一次的函数，并立即执行它
+	- 创建只使用一次的函数比较好理解，在需要调用函数的地方使用IIFE，类似内联的效果：
+	  
+	  ```
+	  (function(){
+	  var a = 1, b = 2;
+	  console.log(a+b); // 3
+	  })();
+	  ```
+	- 还可以传入参数：
+	  
+	  ```
+	  (function(c){
+	  var a = 1, b = 2;
+	  console.log(a+b+c); // 6
+	  })(3);
+	  ```
+	- IIFE比较常见的形式是匿名函数，但是也可以是命名的函数：
+	  
+	  ```
+	  (function adder(a, b){
+	  console.log(a+b); // 7
+	  })(3, 4);
+	  ```
+	- 在js中应该尽量使用命名函数，因为匿名函数在堆栈跟踪的时候会造成一些不便。
+- 创建闭包，保存状态，隔离作用域
+	- 隔离作用域比较复杂一点，在ES6以前，JS没有块级作用域，只有函数作用域，作为一种对块级作用域的模拟就只能用function模拟一个作用域，比如如下代码：
+	  
+	  ```
+	  var myBomb = (function(){
+	  var bomb = "Atomic Bomb"
+	  return {
+	   get: function(){
+	     return bomb
+	   },
+	   set: function(val){
+	     bomb = val
+	   },
+	  }
+	  })()
+	  
+	  console.log(myBomb.get()) // Atomic Bomb
+	  myBomb.set("h-bomb")
+	  console.log(myBomb.get()) // h-bomb
+	  console.log(bomb) // ReferenceError: bomb is not defined
+	  bomb = "none"
+	  console.log(bomb) // none
+	  ```
+	- 可以看到一个比较奇特的现象，按照常理，一个函数执行完毕，在它内部声明的变量都会被销毁，但是这里变量bomb却可以通过myBomb.get和myBomb.set去读写，但是从外部直接去读和写却不行，这是闭包造成的典型效果。
+- 作为独立模块存在，防止命名冲突，命名空间注入
+	- 可以使用以下代码为ns这个命名空间注入变量和方法：
+	  
+	  ```
+	  var ns = ns || {};
+	  
+	  (function (ns){
+	  ns.name = 'Tom';
+	  ns.greet = function(){
+	   console.log('hello!');
+	  }
+	  })(ns);
+	  console.log(ns); // { name: 'Tom', greet: [Function] }
+	  ```
+	- 还可以扩展到更多的用途：
+	  
+	  ```
+	  (function (ns, undefined){
+	  var salary = 5000; // 私有属性
+	  ns.name = 'Tom'; // 公有属性
+	  ns.greet = function(){ // 公有方法
+	   console.log('hello!');
+	  }
+	  
+	  ns.externalEcho = function(msg){
+	   console.log('external echo: ' + msg);
+	   insideEcho(msg);
+	  }
+	  
+	  function insideEcho(msg){ // 私有方法
+	   console.log('inside echo: ' + msg);
+	  }
+	  })(window.ns = window.ns || {});
+	  
+	  console.log(ns.name); // Tom
+	  ns.greet(); // hello
+	  ns.age = 25;
+	  console.log(ns.age); // 25
+	  console.log(ns.salary); // undefined
+	  ns.externalEcho('JavaScript'); // external echo: JavaScript/inside echo: JavaScript
+	  insideEcho('JavaScript'); // Uncaught ReferenceError: insideEcho is not defined
+	  ns.insideEcho('JavaScript'); // Uncaught TypeError: ns.insideEcho is not a function
+	  ```
+	- 命名空间注入是IIFE作为命名空间的装饰器和扩展器的一个变体，使其更具有通用性。作用是可以在一个IIFE(这里可以把它理解成一个函数包装器)内部为一个特定的命名空间注入变量/属性和方法，并且在内部使用this指向该命名空间。
+- ### 3.7.3.  资料总结
+- [https://nullcc.github.io/2017/05/08/%E7%90%86%E8%A7%A3JavaScript%E7%9A%84%E7%AB%8B%E5%8D%B3%E8%B0%83%E7%94%A8%E5%87%BD%E6%95%B0%E8%A1%A8%E8%BE%BE%E5%BC%8F(IIFE)/](https://nullcc.github.io/2017/05/08/%E7%90%86%E8%A7%A3JavaScript%E7%9A%84%E7%AB%8B%E5%8D%B3%E8%B0%83%E7%94%A8%E5%87%BD%E6%95%B0%E8%A1%A8%E8%BE%BE%E5%BC%8F(IIFE)/)
