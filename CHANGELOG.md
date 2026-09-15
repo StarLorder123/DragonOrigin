@@ -4,6 +4,7 @@
 
 ### Documentation
 
+- Add closure (闭包) note to `pages/VSCode解析.md` covering what closures are, their uses and caveats, and closure usage in VSCode's shared process setup
 - Add IIFE (Immediately Invoked Function Expression) note to `pages/VSCode解析.md` covering local scope, closure state isolation, and namespace injection patterns
 - Add Promise note to `pages/VSCode解析.md` covering Promise states, basic usage, then/catch/finally, Promise.all and Promise.race
 - Add Node.js event loop note (`pages/Nodejs事件循环机制.md`) covering the six event loop phases, macro/micro task queues, phase details, and an async example walkthrough
