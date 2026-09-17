@@ -654,5 +654,7 @@
 - SharedProcess是一个内部的变量，通过sharedProcessReady和sharedProcessClient这两个方法传递出去，被调用。
 - ### 3.8.4.  资料总结
 - [https://www.ruanyifeng.com/blog/2009/08/learning_javascript_closures.html](https://www.ruanyifeng.com/blog/2009/08/learning_javascript_closures.html)
--
+- ## 3.9.  Proxy代理
+- javascript中的proxy代理和java中的反射机制很像。
+- [[JavaScript Proxy解析]]
 -

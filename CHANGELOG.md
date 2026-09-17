@@ -4,6 +4,8 @@
 
 ### Documentation
 
+- Add JavaScript Proxy note (`pages/JavaScript Proxy解析.md`) covering proxy syntax, handler traps, and data binding / event listening / caching use cases
+- Link JavaScript Proxy note from new "3.9 Proxy代理" section in `pages/VSCode解析.md`
 - Add closure (闭包) note to `pages/VSCode解析.md` covering what closures are, their uses and caveats, and closure usage in VSCode's shared process setup
 - Add IIFE (Immediately Invoked Function Expression) note to `pages/VSCode解析.md` covering local scope, closure state isolation, and namespace injection patterns
 - Add Promise note to `pages/VSCode解析.md` covering Promise states, basic usage, then/catch/finally, Promise.all and Promise.race
