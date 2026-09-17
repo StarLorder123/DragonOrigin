@@ -657,4 +657,78 @@
 - ## 3.9.  Proxy代理
 - javascript中的proxy代理和java中的反射机制很像。
 - [[JavaScript Proxy解析]]
+- # 4.  VSCode中的基本概念
+- ## 4.1.  Disposable
+- Disposable 是一个非常重要和基础的概念的，它贯穿了整个 vscode 项目中，90% 的对象都是继承 Disposable，还有大量的实现 IDisposable 接口的对象。 Disposable 本身并没有做太多事情: 它是一个抽象类，提供了两个方法 _register （protected） 和 dispose (public)， 可以通过 dispose 方法把 _register 注册的 listener (IDispsable 对象) 给全部销毁。其核心的工作就是将继承Disposable的对象管理起来，再其销毁的时候销毁掉这个对象以及其依赖的对象，提高内存的利用率。
+- 为了保证插件的高效运行，VS Code使用了Dispose模式，大部分插件API都实现了IDisposable接口，生成的对象则会拥有一个dispose函数属性。
+  
+  ```
+  interface IDisposable {
+  dispose(): void;
+  }
+  ```
+- Dispose模式主要用来资源管理，资源比如内存被对象占用，则会通过调用方法来释放，这些方法通常被命名为‘close’，‘dispose’，‘free’，‘release’。一个著名的例子便是C#，C#通过Dipose Pattern来释放不受CLR(Common Language Runtime)管理的非托管资源。
+- Javascript的内存分配是通过GC(garbage collector)进行管理，大部分情况下它都是自动执行且对用户不可见的。然而这种自动化的管理方式却存在一个潜在的问题，就是Javascript开发者会错误的认为他们不需要再关心内存管理了，从而再无意间书写一些不利于内存回收的代码。
+- 所以，最清楚被分配的内存在未来是否需要使用的还是开发者，但是每次使用完一个对象后就手动的将其销毁，这样的做法即不高效，也不可靠。正因为此，VS Code使用了Dispose Pattern来管理对象销毁。当扩展功能执行时，Extension Host会在正确的时机调用dispose方法，销毁Code生成的对象，减少内存使用。比如说，方法‘setStatusBarMessage(value: string)’返回一个‘Disposable’对象，当调用dispose方法的时候会移除掉信息对象。
+- ```
+  // 第一个重载参数是单个disposable类型
+  function dispose<T extends IDisposable>(disposable: T): T;
+  // 第二个重载参数是多个disposable类型传参数，参数可能为undefined。
+  function dispose<T extends IDisposable>(...disposables: Array<T | undefined>): T[];
+  // 第三个重载参数是一个disposable类型的数组。
+  function dispose<T extends IDisposable>(disposables: T[]): T[];
+  // 第三个重载参数为两种，第一个是disposable类型或disposable数组类型，剩余的为disposable类型。
+  function dispose<T extends IDisposable>(first: T | T[], ...rest: T[]): T | T[] | undefined {
+  // 如果第一个参数是数组，则依次调用传参数的dispose方法
+  if (Array.isArray(first)) {
+    first.forEach(d => d && d.dispose());
+    // 返回空的数组
+    return [];
+  } else if (rest.length === 0) {
+    // 如果没有没有剩余参数
+    if (first) {
+      // 如果存在first
+      // 调用第一个dispose
+      first.dispose();
+      // 返回first
+      return first;
+    }
+  - return undefined;
+  } else {
+    // first不是数组，且rest长度不为0
+    dispose(first);
+    dispose(rest);
+  - // 返回空数组
+    return [];
+  }
+  }
+  - // implement IDisposable 的Disposable 抽象类
+  abstract class Disposable implements IDisposable {
+  - // Disposable类的静态对象，用于返回一个包含空的dispose方法的IDisposable对象。dispose被执行了，则表示该对象不再需要了。
+  // 部分基础API使用了该对象，用于标志资源释放。
+  static None = Object.freeze<IDisposable>({ dispose() { } });
+  - // protected属性toDispose返回protected对象_toDispose, 该对象初始值是一个空的数组。
+  protected _toDispose: IDisposable[] = [];
+  // 返回IDisposable数组。
+  protected get toDispose(): IDisposable[] { return this._toDispose; }
+  - // 设置状态标志，表示该对象是否有被销毁。
+  private _lifecycle_disposable_isDisposed = false;
+  - // 暴露公共方法dispose，执行完后将_lifecycle_disposable_isDisposed状态标志设为true，同时调用lifecycle内的dispose方法处理_toDispose数组，并重新赋值空数组。
+  public dispose(): void {
+    this._lifecycle_disposable_isDisposed = true;
+    this._toDispose = dispose(this._toDispose);
+  }
+  - // 内部方法注册实例，若_lifecycle_disposable_isDisposed为true，则表明该方法已经被dispose过，则不能再使用，需dispose掉，否则，推入_toDispose数组。
+  protected _register<T extends IDisposable>(t: T): T {
+    // 判断这个对象有没有被dispose过
+    if (this._lifecycle_disposable_isDisposed) {
+      console.warn('Registering disposable on object that has already been disposed.');
+      t.dispose();
+    } else {
+      this._toDispose.push(t);
+    }
+  - return t;
+  }
+  }
+  ```
 -
