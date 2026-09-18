@@ -4,6 +4,7 @@
 
 ### Documentation
 
+- Add Event and Emitter note to `pages/VSCode解析.md` covering the `Event<T>` interface, disposable-based listener removal, and the Event utility library (`once`, `debounce`, `buffer`, chainable events, DOM/Promise sources)
 - Add Disposable / IDisposable note to `pages/VSCode解析.md` covering the Dispose pattern, resource management, and the `dispose` function implementation
 - Add JavaScript Proxy note (`pages/JavaScript Proxy解析.md`) covering proxy syntax, handler traps, and data binding / event listening / caching use cases
 - Link JavaScript Proxy note from new "3.9 Proxy代理" section in `pages/VSCode解析.md`

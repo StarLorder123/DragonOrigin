@@ -731,4 +731,76 @@
   }
   }
   ```
--
+- ## 4.2.  Event和Emitter
+- 在vscode中事件模块是一个比较基础，而且比较核心的一块内容，可以说是vscode应用程序的一块基石。
+- ### 4.2.1.  Event事件
+- Event 接口规定了一个函数，当调用了这个函数，就表示监听了这个函数所对应的事件流。
+	- listener 参数是事件派发时将会被调用的回调函数，参数 e 为单个事件，换句话说， listener 就是事件的消费者
+	- thisArgs 参数是回调函数中 this 所指向的对象
+	- disposables
+	  
+	  ```
+	  export interface Event<T> {
+	  (listener: (e: T) => any, thisArgs?: any, disposables?: IDisposable[] | DisposableStore): IDisposable;
+	  }
+	  ```
+- 返回的 IDisposable 对象用于解除这个监听的（通过调用它的 dispose 方法）。
+- 另外一种解除监听的方式就是 disposable 了，Event 函数在执行的过程中会将 IDisposable 插入 disposables，方便调用方决定在什么时候解除监听。
+- 在VSCode源码的实现中，实现了一个Event的库。里面包含了很多其他的有关Event事件的方法。
+- ```
+  // 主要定义了一些接口协议，以及相关方法
+  // 使用 namespace 的方式将相关内容包裹起来
+  export namespace Event {
+  	// 来看看里面比较关键的一些方法
+  
+  	// 给定一个事件，返回另一个仅触发一次的事件
+    export function once<T>(event: Event<T>): Event<T> {}
+  
+    // 给定一连串的事件处理功能（过滤器，映射等），每个事件和每个侦听器都将调用每个函数
+    // 对事件链进行快照可以使每个事件每个事件仅被调用一次
+    // 以此衍生了 map、forEach、filter、any 等方法此处省略
+  	export function snapshot<T>(event: Event<T>): Event<T> {}
+  
+  	// 给事件增加防抖
+  	export function debounce<T>(event: Event<T>, merge: (last: T | undefined, event: T) => T, delay?: number, leading?: boolean, leakWarningThreshold?: number): Event<T>;
+  
+  	// 触发一次的事件，同时包括触发时间
+  	export function stopwatch<T>(event: Event<T>): Event<number> {}
+  
+  	// 仅在 event 元素更改时才触发的事件
+  	export function latch<T>(event: Event<T>): Event<T> {}
+  
+  	// 缓冲提供的事件，直到出现第一个 listener，这时立即触发所有事件，然后从头开始传输事件
+  	export function buffer<T>(event: Event<T>, nextTick = false, _buffer: T[] = []): Event<T> {}
+  
+    // 可链式处理的事件，支持以下方法
+  	export interface IChainableEvent<T> {
+  		event: Event<T>;
+  		map<O>(fn: (i: T) => O): IChainableEvent<O>;
+  		forEach(fn: (i: T) => void): IChainableEvent<T>;
+  		filter(fn: (e: T) => boolean): IChainableEvent<T>;
+  		filter<R>(fn: (e: T | R) => e is R): IChainableEvent<R>;
+  		reduce<R>(merge: (last: R | undefined, event: T) => R, initial?: R): IChainableEvent<R>;
+  		latch(): IChainableEvent<T>;
+  		debounce(merge: (last: T | undefined, event: T) => T, delay?: number, leading?: boolean, leakWarningThreshold?: number): IChainableEvent<T>;
+  		debounce<R>(merge: (last: R | undefined, event: T) => R, delay?: number, leading?: boolean, leakWarningThreshold?: number): IChainableEvent<R>;
+  		on(listener: (e: T) => any, thisArgs?: any, disposables?: IDisposable[] | DisposableStore): IDisposable;
+  		once(listener: (e: T) => any, thisArgs?: any, disposables?: IDisposable[]): IDisposable;
+  	}
+  	class ChainableEvent<T> implements IChainableEvent<T> {}
+  
+    // 将事件转为可链式处理的事件
+  	export function chain<T>(event: Event<T>): IChainableEvent<T> {}
+  
+    // 来自 DOM 事件的事件
+  	export function fromDOMEventEmitter<T>(emitter: DOMEventEmitter, eventName: string, map: (...args: any[]) => T = id => id): Event<T> {}
+  
+    // 来自 Promise 的事件
+  	export function fromPromise<T = any>(promise: Promise<T>): Event<undefined> {}
+  }
+  ```
+- Event中主要是一些对事件的处理和某种类型事件的生成。其中，除了常见的once和 DOM 事件等兼容，还提供了比较丰富的事件能力：
+	- 防抖动
+	- 可链式调用
+	- 缓存
+	- Promise 转事件等等
