@@ -804,3 +804,173 @@
 	- 可链式调用
 	- 缓存
 	- Promise 转事件等等
+- ### 4.2.2.  Emitter事件发射器
+- Emitter 类型暴露了两个重要方法：
+	- fire，从这个方法的函数签名就能看出它就是用来派发一个事件的，该方法的主要逻辑就是将 this._listeners 当中的保存的 listener 全部调用一遍（省略了部分分支逻辑和性能监控相关代码）
+	  
+	  ```
+	  fire(event: T): void {
+	  if (this._listeners) {
+	  for (let listener of this._listeners) {
+	  	this._deliveryQueue.push([listener, event]);
+	  }
+	  
+	  while (this._deliveryQueue.size > 0) {
+	  	const [listener, event] = this._deliveryQueue.shift()!;
+	  	try {
+	  		if (typeof listener === 'function') {
+	  			listener.call(undefined, event);
+	  		} else {
+	  			listener[0].call(listener[1], event);
+	  		}
+	  	} catch (e) {
+	  		onUnexpectedError(e);
+	  	}
+	  }
+	  }
+	  }
+	  ```
+	- get event()，这个方法会在 Emitter 中创建一个 Event，其主要逻辑就是将 listener 添加到 this._listeners 当中
+	  
+	  ```
+	  const remove = this._listeners.push(!thisArgs ? listener : [listener, thisArgs]);
+	  ```
+- Emitter 类型还提供了一些特殊的回调接口：
+  
+  ```
+  export interface EmitterOptions {
+  onFirstListenerAdd?: Function;
+  onFirstListenerDidAdd?: Function;
+  onListenerDidAdd?: Function;
+  onLastListenerRemove?: Function;
+  }
+  ```
+- 这使得 Emitter 在注册消费者的时候执行一些额外的逻辑。
+- 事件的使用方式主要包括：
+	- 注册事件发射器
+	- 对外提供定义的事件
+	- 在特定时机向订阅者触发事件
+- 在Emitter的实现过程中，还实现了其他的一些场景，比如防抖、once等等。具体的解析可以参考：[https://github.com/wzhudev/blog/issues/40](https://github.com/wzhudev/blog/issues/40)
+- ### 4.2.3.  简单的Event-Emitter使用
+- 事件的定义:（生产一个事件）
+  
+  ```
+  export class EditorService extends Disposable implements EditorServiceImpl {
+  declare readonly _serviceBrand: undefined;
+  //#region events
+  private readonly _onDidActiveEditorChange = this._register(new Emitter<void>());
+  readonly onDidActiveEditorChange = this._onDidActiveEditorChange.event;
+  private readonly _onDidVisibleEditorsChange = this._register(new Emitter<void>());
+  readonly onDidVisibleEditorsChange = this._onDidVisibleEditorsChange.event;
+  private readonly _onDidEditorsChange = this._register(new Emitter<IEditorsChangeEvent>());
+  readonly onDidEditorsChange = this._onDidEditorsChange.event;
+  private readonly _onDidCloseEditor = this._register(new Emitter<IEditorCloseEvent>());
+  readonly onDidCloseEditor = this._onDidCloseEditor.event;
+  //#endregion
+  }
+  ```
+- 事件的消费：（注册监听函数）
+  
+  ```
+  import { Event } from 'vs/base/common/event';
+  class MainThreadDocumentAndEditorStateComputer {
+  constructor(
+  @IEditorService private readonly _editorService: IEditorService,
+  ) {
+  
+  this._editorService.onDidActiveEditorChange(_ => this._updateState(), this, this._toDispose);
+  Event.filter(this._paneCompositeService.onDidPaneCompositeOpen, event => event.viewContainerLocation === ViewContainerLocation.Panel)(_ => this._activeEditorOrder = ActiveEditorOrder.Panel, undefined, this._toDispose);
+  Event.filter(this._paneCompositeService.onDidPaneCompositeClose, event => event.viewContainerLocation === ViewContainerLocation.Panel)(_ => this._activeEditorOrder = ActiveEditorOrder.Editor, undefined, this._toDispose);
+  this._editorService.onDidVisibleEditorsChange(_ => this._activeEditorOrder = ActiveEditorOrder.Editor, undefined, this._toDispose);
+  }
+  }
+  ```
+- ### 4.2.4.  观察者模式（订阅-发布）
+	- Observer：抽象观察者，是观察者的抽象类，它定义了一个更新接口，使得在得到主题更改通知时更新自己。
+	- ConcrereObserver：具体观察者，实现抽象观察者定义的更新接口，以便在得到主题更改通知时更新自身的状态。
+- 【例】微信公众号
+	- 在使用微信公众号时，大家都会有这样的体验，当你关注的公众号中有新内容更新的话，它就会推送给关注公众号的微信用户端。我们使用观察者模式来模拟这样的场景，微信用户就是观察者，微信公众号是被观察者，有多个的微信用户关注了程序猿这个公众号。
+- ```
+  public interface Observer {
+      void update(String message);
+  }
+  
+  public class WeixinUser implements Observer {
+      // 微信用户名
+      private String name;
+  
+      public WeixinUser(String name) {
+          this.name = name;
+      }
+      @Override
+      public void update(String message) {
+          System.out.println(name + "-" + message);
+      }
+  }
+  
+  public interface Subject {
+      //增加订阅者
+      public void attach(Observer observer);
+  
+      //删除订阅者
+      public void detach(Observer observer);
+      
+      //通知订阅者更新消息
+      public void notify(String message);
+  }
+  
+  public class SubscriptionSubject implements Subject {
+      //储存订阅公众号的微信用户
+      private List<Observer> weixinUserlist = new ArrayList<Observer>();
+  
+      @Override
+      public void attach(Observer observer) {
+          weixinUserlist.add(observer);
+      }
+  
+      @Override
+      public void detach(Observer observer) {
+          weixinUserlist.remove(observer);
+      }
+  
+      @Override
+      public void notify(String message) {
+          for (Observer observer : weixinUserlist) {
+              observer.update(message);
+          }
+      }
+  }
+  
+  public class Client {
+      public static void main(String[] args) {
+          SubscriptionSubject mSubscriptionSubject=new SubscriptionSubject();
+          //创建微信用户
+          WeixinUser user1=new WeixinUser("孙悟空");
+          WeixinUser user2=new WeixinUser("猪悟能");
+          WeixinUser user3=new WeixinUser("沙悟净");
+          //订阅公众号
+          mSubscriptionSubject.attach(user1);
+          mSubscriptionSubject.attach(user2);
+          mSubscriptionSubject.attach(user3);
+          //公众号更新发出消息给订阅的微信用户
+          mSubscriptionSubject.notify("传智黑马的专栏更新了");
+      }
+  }
+  ```
+- **优点：**
+	- 降低了目标与观察者之间的耦合关系，两者之间是抽象耦合关系。
+	- 被观察者发送通知，所有注册的观察者都会收到信息【可以实现广播机制】
+- **缺点：**
+	- 如果观察者非常多的话，那么所有的观察者收到被观察者发送的通知会耗时
+	- 如果被观察者有循环依赖的话，那么被观察者发送通知会使观察者循环调用，会导致系统崩溃
+- **使用场景**
+	- 对象间存在一对多关系，一个对象的状态发生改变会影响其他对象。
+	- 当一个抽象模型有两个方面，其中一个方面依赖于另一方面时。
+- ### 4.2.5.  小结
+- 事件是什么，事件本身没有任何功能逻辑，事件的功能逻辑都在监听函数的处理中，事件提供的是一种**注册事件标识符、外界能注册某个事件发生时的回调（监听函数）、外界能够触发事件的能力、内部在事件发生时能执行监听函数、移出监听函数销毁事件等清理能力**，VSCode 将事件的清理做成了自动化的方式。
+- 类的具名化调用
+	- 通过new Emitter<IXXXEvent>()生产一个包含类型的事件，提供的get event()获得可以注册回调函数 listener 的事件接口，并且将这个 event 挂载在功能类XXXService的属性onXXXEvent上
+	- 其它类通过依赖注入和上述功能类产生依赖关系，调用上述XXXService.onXXXEvent(() => //listener )注册回调函数
+- 类的自动销毁：通过依赖的标准化注册流程，**一个类销毁时，自动分析依赖销毁依赖里相关的内容，做到了自动化的链式销毁。**
+	- 事件定义方的类销毁时：this._register(new Emitter<IXXXEvent>())将生产的事件_register 到自己的类上，收集了一个依赖，在自己的类 dispose 时调用 _register 里注册的事件 Emitter 的 dispose 方法，做到了自己销毁时，自己生产的事件也被销毁
+	- 事件监听方的类销毁时：监听方 xxxService 的类销毁 -> 调用 xxxService.dispose() -> 找到 xxxService 上 _register 的事件监听器的返回内容 -> 执行事件监听器返回内容 SafeDisposable.dispose -> 抹除了原始事件监听列表里对 xxxService 对该事件注册
