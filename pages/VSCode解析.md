@@ -974,3 +974,220 @@
 - 类的自动销毁：通过依赖的标准化注册流程，**一个类销毁时，自动分析依赖销毁依赖里相关的内容，做到了自动化的链式销毁。**
 	- 事件定义方的类销毁时：this._register(new Emitter<IXXXEvent>())将生产的事件_register 到自己的类上，收集了一个依赖，在自己的类 dispose 时调用 _register 里注册的事件 Emitter 的 dispose 方法，做到了自己销毁时，自己生产的事件也被销毁
 	- 事件监听方的类销毁时：监听方 xxxService 的类销毁 -> 调用 xxxService.dispose() -> 找到 xxxService 上 _register 的事件监听器的返回内容 -> 执行事件监听器返回内容 SafeDisposable.dispose -> 抹除了原始事件监听列表里对 xxxService 对该事件注册
+- ## 4.3.  通信机制
+- Electron框架是一个典型的多进程多线程的框架，免不了需要去设计进程间的通信。
+- 接下来介绍一下VSCode中的一些关于通信方面的概念
+- 通信机制会有如下内容需要设计：
+	- 协议设计-Protocol
+	- 通信频道-Channel
+	- 连接-Connection
+	- 服务端-IPCServer
+	- 客户端-IPCClient
+- ### 4.3.1.  通信概念释义
+  
+  | **概念名词** | **概念解释** | **作用** |
+  | **Protocol** | 通信协议 | 通信的基础协议规范 |
+  | **Channel** | 客户端频道 | 端与端之间进行信息传输的通道，类似于电台频道 |
+  | **ServerChannel** | 服务端频道 | 端与端之间进行信息传输的通道，类似于电台频道 |
+  | **ChannelClient** | 频道的客户端 | 客户端频道的管理 |
+  | **ChannelServer** | 频道的服务端 | 服务端频道的管理 |
+  | **Connection** | 连接 | 端与端之间的连接对应关系 |
+  | **IPCClient** | IPC 客户端 | 负责连接的建立以及 Channel 的注册和获取 |
+  | **IPCServer** | IPC 服务端 | 负责连接的建立以及 Channel 的注册和获取 |
+- 协议（Protocol）
+	- 两个端之间进行消息通信的约定，比如我们是通过语言还是手语比划进行通信，需要通过协议进行约定。
+	- 在 VS Code 中，约定了最基础的协议范围包括发送和接收消息两个方法：
+		- 发送：send
+		- 接收：onMessage
+- 频道（Channel）
+	- 狭义定义上，频道又叫信道，信道是信号在通信系统重传输的通道，是信号从发射端传输到接收端所经过的传输煤质。
+	- 在 VS Code 中，频道是一组可供其他端进行调用的服务集合。一个标准的频道有两个功能：
+		- 点播：call
+		- 收听：listen
+	- 在频道中，Server是专门处理消息的类，Client是专门发送消息的类。
+- 客户端&服务端（Server&Client）
+	- 客户端 & 服务端是频道的承载主体。一般客户端是指发起连接的一端，服务端是被连接的一端。
+	- 在 VS Code 中，服务端提供一系列服务的频道；渲染进程是客户端，调用服务端频道中的服务或者收听服务端消息。不管是服务端还是客户端，都需要具备发送和接受消息的能力，才能实现正常的通信。
+- 连接（Connection）
+	- 客户端 & 服务端之间进行通信依赖的连接。
+	- 在 VS Code 中一个连接其实是一对客户端与服务端的对应关系。
+- 上述接口和类的定义对应文件为：src/vs/base/parts/ipc/common/ipc.ts
+- ### 4.3.2.  实现示例
+  
+  ![](https://cdn.nlark.com/yuque/0/2024/jpeg/2713067/1708998583271-d0834f61-54a8-43c4-9d1d-f72522c04aca.jpeg)
+- 请求实现（基于 IMessagePassingProtocol 协议）
+  
+  ```
+  class QueueProtocol implements IMessagePassingProtocol {
+  private buffering = true;
+  private buffers: VSBuffer[] = [];
+  
+  private readonly _onMessage = new Emitter<VSBuffer>({
+    onDidAddFirstListener: () => {
+      for (const buffer of this.buffers) {
+        this._onMessage.fire(buffer);
+      }
+  
+      this.buffers = [];
+      this.buffering = false;
+    },
+    onDidRemoveLastListener: () => {
+      this.buffering = true;
+    }
+  });
+  
+  readonly onMessage = this._onMessage.event;
+  other!: QueueProtocol;
+  
+  send(buffer: VSBuffer): void {
+    this.other.receive(buffer);
+  }
+  
+  protected receive(buffer: VSBuffer): void {
+    if (this.buffering) {
+      this.buffers.push(buffer);
+    } else {
+      this._onMessage.fire(buffer);
+    }
+  }
+  }
+  ```
+- 客户端（基于IPCClient）
+  
+  ```
+  class TestIPCClient extends IPCClient<string> {
+  private readonly _onDidDisconnect = new Emitter<void>();
+  readonly onDidDisconnect = this._onDidDisconnect.event;
+  
+  constructor(protocol: IMessagePassingProtocol, id: string) {
+  super(protocol, id);
+  }
+  
+  override dispose(): void {
+  this._onDidDisconnect.fire();
+  super.dispose();
+  }
+  }
+  ```
+- 服务端（基于IPCServer）
+  
+  ```
+  class TestIPCServer extends IPCServer<string> {
+  private readonly onDidClientConnect: Emitter<ClientConnectionEvent>;
+  
+  constructor() {
+  const onDidClientConnect = new Emitter<ClientConnectionEvent>();
+  super(onDidClientConnect.event);
+  this.onDidClientConnect = onDidClientConnect;
+  }
+  
+  // 创建一个客户端 & 服务端的连接
+  createConnection(id: string): IPCClient<string> {
+  const [pc, ps] = createProtocolPair();
+    const pc = new QueueProtocol();
+    const ps = new QueueProtocol();
+    pc.other = ps;
+    ps.other = pc;
+  const client = new TestIPCClient(pc, id);
+  
+  this.onDidClientConnect.fire({
+  	protocol: ps,
+  	onDidClientDisconnect: client.onDidDisconnect
+  });
+  
+  return client;
+  }
+  }
+  ```
+- 服务端频道及其对应的服务
+  
+  ```
+  // 服务接口
+  interface ITestService {
+  marco(): Promise<string>;
+  onPong: Event<string>;
+  }
+  
+  // 服务
+  class TestService implements ITestService {
+  private readonly _onPong = new Emitter<string>();
+  readonly onPong = this._onPong.event;
+  
+  marco(): Promise<string> {
+  return Promise.resolve('polo');
+  }
+  
+  ping(msg: string): void {
+  this._onPong.fire(msg);
+  }
+  }
+  
+  // 服务频道
+  class TestChannel implements IServerChannel {
+  constructor(private service: ITestService) { }
+  
+  call(_: unknown, command: string, arg: any, cancellationToken: CancellationToken): Promise<any> {
+  switch (command) {
+  	case 'marco': return this.service.marco();
+  	default: return Promise.reject(new Error('not implemented'));
+  }
+  }
+  
+  listen(_: unknown, event: string, arg?: any): Event<any> {
+  switch (event) {
+  	case 'onPong': return this.service.onPong;
+  	default: throw new Error('not implemented');
+  }
+  }
+  }
+  ```
+- 客户端频道服务
+  
+  ```
+  class TestChannelClient implements ITestService {
+  get onPong(): Event<string> {
+  return this.channel.listen('onPong');
+  }
+  
+  constructor(private channel: IChannel) { }
+  
+  marco(): Promise<string> {
+  return this.channel.call('marco');
+  }
+  }
+  ```
+- 实现一对多IPC通信
+  
+  ```
+  // 创建服务
+  const service = new TestService();
+  // 创建服务端
+  const server = new TestIPCServer();
+  // 创建服务端频道
+  const channel = new TestChannel(service);
+  // 服务端注册服务
+  server.registerChannel('channel', channel);
+  
+  // 创建客户端-1
+  const client1 = server.createConnection('client1');
+  // 创建客户端-1对应的频道服务
+  const ipcService1 = new TestChannelClient(client1.getChannel('channel'));
+  // 创建客户端-2
+  const client2 = server.createConnection('client2');
+  // 创建客户端-2对应的频道服务
+  const ipcService2 = new TestChannelClient(client2.getChannel('channel'));
+  ```
+- 客户端监听服务端
+  
+  ```
+  ipcService1.onPong(() => console.log('Receive ping message on service1'));
+  ipcService2.onPong(() => console.log('Receive ping message on service2'));
+  ```
+- 服务端通知：
+  
+  ```
+  service.ping('hello world');
+  ```
+- ### 4.3.3.  资料总结
+- [https://developer.aliyun.com/article/1191616](https://developer.aliyun.com/article/1191616)
+-
