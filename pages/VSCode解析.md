@@ -1190,4 +1190,42 @@
   ```
 - ### 4.3.3.  资料总结
 - [https://developer.aliyun.com/article/1191616](https://developer.aliyun.com/article/1191616)
--
+- ## 4.4.  同步屏障
+- barrier 类通常指的是 TypeScript 或 JavaScript 中的 Barrier 类型，它用于控制异步操作的执行顺序。Barrier 类型是 vscode 扩展 API 中的一部分，用于确保异步操作在特定的顺序下执行，或者在所有操作都完成之后才执行某些操作。
+- Barrier 类型的主要作用包括：
+	- 同步异步操作：Barrier 可以用来同步多个异步操作，确保它们按照特定的顺序执行。这在需要等待多个异步操作完成后才能继续执行下一步的场景中非常有用。
+	- 等待所有操作完成：使用 Barrier，你可以等待一组异步操作全部完成后再执行某些代码。这可以通过 Barrier.wait() 方法实现，该方法会阻塞直到所有注册的异步操作都完成。
+	- 避免竞态条件：在多线程或多任务环境中，Barrier 可以帮助避免竞态条件，确保资源在被访问之前已经准备好。
+	- 简化异步代码：通过使用 Barrier，可以简化异步代码的复杂性，使得代码更加清晰和易于管理。
+- 在 VSCode 扩展开发中，Barrier 类型通常用于以下场景：
+	- 当扩展需要等待用户完成某些操作（如选择文件、输入文本等）后再继续执行。
+	- 当扩展需要在多个异步操作完成后更新 UI 或执行其他逻辑。
+	  
+	  ```
+	  export class Barrier {
+	  private _isOpen: boolean;
+	  private _promise: Promise<boolean>;
+	  private _completePromise!: (v: boolean) => void;
+	  
+	  constructor() {
+	  this._isOpen = false;
+	  this._promise = new Promise<boolean>((c, e) => {
+	  this._completePromise = c;
+	  });
+	  }
+	  
+	  isOpen(): boolean {
+	  return this._isOpen;
+	  }
+	  
+	  open(): void {
+	  this._isOpen = true;
+	  this._completePromise(true);
+	  }
+	  
+	  wait(): Promise<boolean> {
+	  return this._promise;
+	  }
+	  }
+	  ```
+	-

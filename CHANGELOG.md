@@ -4,6 +4,7 @@
 
 ### Documentation
 
+- Add Barrier (同步屏障) note to `pages/VSCode解析.md` covering the Barrier type for synchronizing async operations, the `wait()` / `open()` methods, avoiding race conditions, and its implementation
 - Add VSCode IPC communication mechanism note (`pages/VSCode解析.md`) covering communication concepts (Protocol, Channel, Connection, IPCClient/IPCServer), the `QueueProtocol` / `TestIPCClient` / `TestIPCServer` / `TestChannel` examples, and one-to-many IPC setup
 - Add Emitter event emitter note to `pages/VSCode解析.md` covering `Emitter.fire` / `get event()`, `EmitterOptions` callbacks, an `EditorService` event usage example, the observer (发布-订阅) pattern, and a summary of event-based named/auto-disposed registration
 - Add Event and Emitter note to `pages/VSCode解析.md` covering the `Event<T>` interface, disposable-based listener removal, and the Event utility library (`once`, `debounce`, `buffer`, chainable events, DOM/Promise sources)
