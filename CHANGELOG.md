@@ -4,6 +4,7 @@
 
 ### Documentation
 
+- Add IoC and dependency injection note (`pages/VSCode解析.md`) covering the inversion-of-control principle, the dependency-injection design pattern, VSCode's service-based architecture, service identifiers/`createDecorator`, the `InstantiationService` container, `SyncDescriptor`, and `createInstance` / `invokeFunction` / `createChild` usage
 - Add Barrier (同步屏障) note to `pages/VSCode解析.md` covering the Barrier type for synchronizing async operations, the `wait()` / `open()` methods, avoiding race conditions, and its implementation
 - Add VSCode IPC communication mechanism note (`pages/VSCode解析.md`) covering communication concepts (Protocol, Channel, Connection, IPCClient/IPCServer), the `QueueProtocol` / `TestIPCClient` / `TestIPCServer` / `TestChannel` examples, and one-to-many IPC setup
 - Add Emitter event emitter note to `pages/VSCode解析.md` covering `Emitter.fire` / `get event()`, `EmitterOptions` callbacks, an `EditorService` event usage example, the observer (发布-订阅) pattern, and a summary of event-based named/auto-disposed registration

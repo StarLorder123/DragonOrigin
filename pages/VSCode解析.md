@@ -1228,4 +1228,156 @@
 	  }
 	  }
 	  ```
-	-
+- # 5.  VSCode的关键机制和关键部分解析
+- ## 5.1.  IoC和DI
+- ### 5.1.1.  简要介绍
+- **控制反转（Inversion of Control）**是一种是面向对象编程中的一种设计原则，用来减低计算机代码之间的耦合度。其基本思想是：借助于“第三方”实现具有依赖关系的对象之间的解耦。
+  
+  ![](https://cdn.nlark.com/yuque/0/2023/webp/2713067/1695540765789-f62a4f13-ca6a-4c62-b1b7-2810c517cb84.webp)![](https://cdn.nlark.com/yuque/0/2023/webp/2713067/1695540773800-54593eba-df0e-49aa-8fde-3b3ad9ca417b.webp)
+- 由于引进了中间位置的“第三方”，也就是IOC容器，使得A、B、C、D这4个对象没有了耦合关系，齿轮之间的传动全部依靠“第三方”了，全部对象的控制权全部上缴给“第三方”IOC容器，所以，IOC容器成了整个系统的关键核心。
+- **依赖注入（Dependency Injection）**就是将实例变量传入到一个对象中。**控制反转**是一种思想，**依赖注入**是一种设计模式。IoC框架使用依赖注入作为实现控制反转的方式，但是控制反转还有其他的实现方式。
+- ### 5.1.2.  VSCode依赖注入简要介绍
+- VSCode 的代码是围绕着各式各样的 service 组织起来的，这些 service 基本都定义在 platform 那一层，通过构造函数注入器（constructor injection）注入到 client 中。
+- 一个 service 需要两部分定义：1. service 接口定义 2. service 标志符。service 标志符是一个装饰器（Decorator是ES7的提案）并且必须和 service 接口同名。
+- 在VSCode的编码实现中，我们会发现实现一个服务所需要的通用步骤：
+	- 定义服务接口：首先需要定义服务接口，该接口定义了服务的 API，即服务能够提供哪些功能。接口通常放在 vs/platform 文件夹下的一个子文件夹中，比如 vs/platform/telemetry/common/telemetry。
+	- 定义与服务器同名的Identifier，比如export const IProductService = createDecorator<IProductService>('productService');。
+	- 注册服务：其次需要在应用程序的入口处，即 vs/code/electron-main/main.ts 中注册服务，并将其添加到容器中（以Identifier为key，实例或者SyncDescriptor实例作为value）。
+- VS Code 中依赖注入的实现主要在 vs/platform/instantiation/common 文件夹下，如下：
+	- descriptors.ts           服务实例包装类
+	- extensions.ts            通用服务注册、获取服务
+	- graph.ts                   基于有向图的依赖分析
+	- instantiation.ts         服务实例(创建 Decorator、存储服务的依赖)
+	- instantiationService.ts    容器
+	- serviceCollection.ts         服务集合
+- VSCode的依赖注入大致实现的原理就是：
+	- 第一次会将需要注入的服务形成一个有向图
+	- 第二次会遍历这个有向图然后生成对应的实例注入。使用图的数据结构可以清晰地看到依赖关系链路，并且能够快速识别出循环依赖问题。
+- ### 5.1.3.  基本用法
+- 首先需要定义一个类并在其构造函数中声明依赖的服务
+  
+  ```
+  class MyClass {
+  constructor(
+  @IAuthService private readonly authService: IAuthService,
+  @IStorageService private readonly storageService: IStorageService,
+  ) {
+  }
+  }
+  ```
+- 构造函数中的 @IAuthService 和 @IStorageService 是两个 Decorator（装饰器），装饰器在 JavaScript 中还属于一项提案，在 TypeScript 中是一项实验性特性。它可以被附加到类声明、方法、访问符以及参数上，在这段代码中他们被附加到了 MyClass 的构造函数参数 authService 和 storageService 上，也就是参数装饰器。参数装饰器会在运行时被函数调用，并传入三个参数：
+- 对于静态成员来说是类的构造函数，对于实例成员是类的原型对象
+- 成员的名字
+- 参数在函数参数列表中的索引
+- 服务的 Decorator 和接口定义一般如下
+  
+  ```
+  // 创建装饰器
+  export const IAuthService = createDecorator<IAuthService>('AuthService');
+  // 接口
+  export interface IAuthService {
+  readonly id: string;
+  readonly nickName: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  requestService: IRequestService;
+  }
+  ```
+- 服务接口需要有具体实现，同时也允许依赖其他服务
+- ```
+  class AuthServiceImpl implements IAuthService {
+    constructor(
+  		@IRequestService public readonly requestService IRequestService,		
+    ){
+    }
+  
+    public async getUserInfo() {
+  		const { id, nickName, firstName } = await getUserInfo();
+  		this.id = id;
+  		this.nickName = nickName;
+  		this.firstName = firstName;
+  		//...
+  	} 
+  }
+  ```
+- 还需要一个服务集，用于保存一组服务，并用其来创建一个容器
+  
+  ```
+  // 服务集
+  export class ServiceCollection {
+  
+  private _entries = new Map<ServiceIdentifier<any>, any>();
+  
+  constructor(...entries: [ServiceIdentifier<any>, any][]) {
+  for (let [id, service] of entries) {
+  	this.set(id, service);
+  }
+  }
+  
+  set<T>(id: ServiceIdentifier<T>, instanceOrDescriptor: T | SyncDescriptor<T>): T | SyncDescriptor<T> {
+  const result = this._entries.get(id);
+  this._entries.set(id, instanceOrDescriptor);
+  return result;
+  }
+  
+  forEach(callback: (id: ServiceIdentifier<any>, instanceOrDescriptor: any) => any): void {
+  this._entries.forEach((value, key) => callback(key, value));
+  }
+  
+  has(id: ServiceIdentifier<any>): boolean {
+  return this._entries.has(id);
+  }
+  
+  get<T>(id: ServiceIdentifier<T>): T | SyncDescriptor<T> {
+  return this._entries.get(id);
+  }
+  }
+  ```
+- 前文说到对象由容器自动实例化，实际上在 VSCode 中一些服务没有其他依赖（例如日志服务），仅被其他服务所依赖，所以可以手动实例化并注册到容器中。而这个例子中 AuthServiceImpl 还依赖 IRequestService，需要用 SyncDescriptor 封装一下保存在服务集中
+  
+  ```
+  const services = new ServiceCollection(); // 创建一个服务集
+  const logService = new LogService(); // 直接实例化一个服务
+  
+  services.set(ILogService, logService);
+  services.set(IAuthService, new SyncDescriptor(AuthServiceImpl)); // 第一个参数即服务的装饰器
+  ```
+- SyncDescriptor 是一个用于包装需要被容器实例化容器的描述符对象，它保存了对象的构造器和静态参数（需要被直接传递给构造函数）
+  
+  ```
+  export class SyncDescriptor<T> {
+  
+  readonly ctor: any;
+  readonly staticArguments: any[];
+  readonly supportsDelayedInstantiation: boolean;
+  
+  constructor(ctor: new (...args: any[]) => T, staticArguments: any[] = [], supportsDelayedInstantiation: boolean = false) {
+  this.ctor = ctor; // 服务的构造器
+  this.staticArguments = staticArguments; // 静态参数
+  this.supportsDelayedInstantiation = supportsDelayedInstantiation; // 是否支持延迟实例化
+  }
+  }
+  ```
+- 到这里我们可以创建容器并把服务注册到容器中了，VSCode 中容器是 InstantiationService
+  
+  ```
+  const instantiationService = new InstantiationService(services, true);
+  ```
+- InstantiationService 是依赖注入的核心，当服务被注册到容器后，我们需要先手动实例化程序入口，在 VSCode 中即是 CodeApplication，容器（instantiationService）保存着这些对象的依赖关系，所以 CodeApplication 也需要借助容器来实例化。
+  
+  ```
+  // 这里第二和第三个参数是 CodeApplication 构造器的静态参数，需要手动传递进去
+  instantiationService.createInstance(CodeApplication, mainIpcServer, instanceEnvironment).startup();
+  ```
+- 同时也可以手动获取服务实例，需要调用 instantiationService.invokeFunction 方法，传入一个回调函数，其参数是一个访问器，当通过访问器获取指定服务时，容器会自动去分析它所依赖的服务并自动实例化后返回。
+  
+  ```
+  instantiationService.invokeFunction(accessor => {
+  const logService = accessor.get(ILogService);
+  const authService = accessor.get(IAuthService);
+  });
+  ```
+- instantiationService 包含一个成员方法 createChild ，可以创建一个子容器，为了更好地划分依赖关系，子容器可以访问父容器中的服务实例，反之父容器则无法访问子容器的实例，当子容器中不存在所需要的服务实例时会调用 instantiationService._parent 获取父容器的引用并逐层往上查找依赖。
+- 以上是 VSCode 中实现依赖注入的基本用法，相比传统 Spring 等框架来说简单了不少，没有那么多种注入方式，不需要将依赖关系写到单独某个文件中，同时也提供了手动获取依赖及实例化的机制。
+- **总体来说，VSCode除了可以运用这种方式来实现Service的自动注入以外，还可以通过这种方式来自由地、灵活地加载在不同环境下的Service服务。**
+-
