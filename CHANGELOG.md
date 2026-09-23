@@ -4,6 +4,7 @@
 
 ### Documentation
 
+- Add VSCode IoC/DI implementation and AMD loader note (`pages/VSCode解析.md`) covering the `createDecorator` / `storeServiceDependency` internals, the `$di$dependencies` / `$di$target` magic strings, and the AMD vs CMD module systems plus `vscode-loader`'s `ScriptLoader` / `ModuleManager` and global `define`/`require` patching
 - Add IoC and dependency injection note (`pages/VSCode解析.md`) covering the inversion-of-control principle, the dependency-injection design pattern, VSCode's service-based architecture, service identifiers/`createDecorator`, the `InstantiationService` container, `SyncDescriptor`, and `createInstance` / `invokeFunction` / `createChild` usage
 - Add Barrier (同步屏障) note to `pages/VSCode解析.md` covering the Barrier type for synchronizing async operations, the `wait()` / `open()` methods, avoiding race conditions, and its implementation
 - Add VSCode IPC communication mechanism note (`pages/VSCode解析.md`) covering communication concepts (Protocol, Channel, Connection, IPCClient/IPCServer), the `QueueProtocol` / `TestIPCClient` / `TestIPCServer` / `TestChannel` examples, and one-to-many IPC setup

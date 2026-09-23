@@ -1380,4 +1380,225 @@
 - instantiationService 包含一个成员方法 createChild ，可以创建一个子容器，为了更好地划分依赖关系，子容器可以访问父容器中的服务实例，反之父容器则无法访问子容器的实例，当子容器中不存在所需要的服务实例时会调用 instantiationService._parent 获取父容器的引用并逐层往上查找依赖。
 - 以上是 VSCode 中实现依赖注入的基本用法，相比传统 Spring 等框架来说简单了不少，没有那么多种注入方式，不需要将依赖关系写到单独某个文件中，同时也提供了手动获取依赖及实例化的机制。
 - **总体来说，VSCode除了可以运用这种方式来实现Service的自动注入以外，还可以通过这种方式来自由地、灵活地加载在不同环境下的Service服务。**
--
+- ### 5.1.4.  实现原理
+- 一开始调用 createDecorator 函数定义了一个服务的装饰器，用于在构造函数中声明依赖关系以方便注入依赖。createDecorator 的主要作用是返回一个装饰器
+- ```
+  export function createDecorator<T>(serviceId: string): { (...args: any[]): void; type: T; } {
+  
+    // 已经保存过的服务会直接返回其装饰器
+  	if (_util.serviceIds.has(serviceId)) {
+  		return _util.serviceIds.get(serviceId)!;
+  	}
+  
+    // 声明装饰器
+  	const id = <any>function (target: Function, key: string, index: number): any {
+  		if (arguments.length !== 3) {
+  			throw new Error('@IServiceName-decorator can only be used to decorate a parameter');
+  		}
+      // 将服务作为依赖保存在为目标类的属性中
+  		storeServiceDependency(id, target, index, false);
+  	};
+  
+  	id.toString = () => serviceId;
+  
+  	_util.serviceIds.set(serviceId, id);
+  	return id;
+  }
+  ```
+- 同时调用 storeServiceDependency 函数将传入的服务 ID (唯一的字符串)及索引保存在所装饰类的一个成员 **$di$dependencies** 数组中
+  
+  ```
+  function storeServiceDependency(id: Function, target: Function, index: number, optional: boolean): void {
+  if (target[_util.DI_TARGET] === target) {
+  target[_util.DI_DEPENDENCIES].push({ id, index, optional });
+  } else {
+  target[_util.DI_DEPENDENCIES] = [{ id, index, optional }];
+  target[_util.DI_TARGET] = target;
+  }
+  }
+  ```
+- 其中 _util.DI_DEPENDENCIES 和 _util.DI_TARGET 分别是两个 magic string
+  
+  ```
+  export const DI_TARGET = '$di$target';
+  export const DI_DEPENDENCIES = '$di$dependencies';
+  ```
+- 对于第一个例子中 MyClass，其构造函数中的两个装饰器在编译时会被自动执行，并将依赖的服务记录到 $di$dependencies
+  
+  ```
+  MyClass['$di$dependencies'] = [
+  { id: 'AuthService', index: 0, optional: false },
+  { id: 'StorageService', index: 1, optional: false }
+  ];
+  
+  MyClass['$di$target'] = MyClass;
+  ```
+- 对于被装饰器装饰过的入参，会直接通过IoC容器被注入到对应的类中去。
+- ### 5.1.5.  资料总结
+- [https://zhuanlan.zhihu.com/p/60228431](https://zhuanlan.zhihu.com/p/60228431)
+- ## 5.2.  AMD机制
+- ### 5.2.1.  AMD和CMD的异同点
+- AMD规范采用异步方式加载模块，模块的加载不影响它后面语句的运行。所有依赖这个模块的语句，都定义在一个回调函数中，等到加载完成之后，这个回调函数才会运行。这里介绍用require.js实现AMD规范的模块化：用require.config()指定引用路径等，用definde()定义模块，用require()加载模块。
+- 首先我们需要引入require.js文件和一个入口文件main.js。main.js中配置require.config()并规定项目中用到的基础模块。
+  
+  ```
+  /** 网页中引入require.js及main.js **/
+  <script src="js/require.js" data-main="js/main"></script>
+  
+  /** main.js 入口文件/主模块 **/
+  // 首先用config()指定各模块路径和引用名
+  require.config({
+  baseUrl: "js/lib",
+  paths: {
+    "jquery": "jquery.min",  //实际路径为js/lib/jquery.min.js
+    "underscore": "underscore.min",
+  }
+  });
+  // 执行基本操作
+  require(["jquery","underscore"],function($,_){
+  // some code here
+  });
+  ```
+- 引用模块的时候，我们将模块名放在[]中作为reqiure()的第一参数；如果我们定义的模块本身也依赖其他模块,那就需要将它们放在[]中作为define()的第一参数。
+- ```
+  // 定义math.js模块
+  define(function () {
+      var basicNum = 0;
+      var add = function (x, y) {
+          return x + y;
+      };
+      return {
+          add: add,
+          basicNum :basicNum
+      };
+  });
+  
+  // 定义一个依赖underscore.js的模块
+  define(['underscore'],function(_){
+    var classify = function(list){
+      _.countBy(list,function(num){
+        return num > 30 ? 'old' : 'young';
+      })
+    };
+    return {
+      classify :classify
+    };
+  })
+  
+  // 引用模块，将模块放在[]内
+  require(['jquery', 'math'],function($, math){
+    var sum = math.add(10,20);
+    $("#sum").html(sum);
+  });
+  ```
+- CMD是另一种js模块化方案，它与AMD很类似，不同点在于：AMD推崇依赖前置、提前执行，CMD推崇依赖就近、延迟执行。此规范其实是在sea.js推广过程中产生的。
+  
+  ```
+  /** AMD写法 **/
+  define(["a", "b", "c", "d", "e", "f"], function(a, b, c, d, e, f) { 
+     // 等于在最前面声明并初始化了要用到的所有模块
+    a.doSomething();
+    if (false) {
+        // 即便没用到某个模块 b，但 b 还是提前执行了
+        b.doSomething()
+    } 
+  });
+  
+  /** CMD写法 **/
+  define(function(require, exports, module) {
+    var a = require('./a'); //在需要时申明
+    a.doSomething();
+    if (false) {
+        var b = require('./b');
+        b.doSomething();
+    }
+  });
+  
+  /** sea.js **/
+  // 定义模块 math.js
+  define(function(require, exports, module) {
+    var $ = require('jquery.js');
+    var add = function(a,b){
+        return a+b;
+    }
+    exports.add = add;
+  });
+  
+  // 加载模块
+  seajs.use(['math.js'], function(math){
+    var sum = math.add(1+2);
+  });
+  ```
+- ### 5.2.2.  vscode-loader
+- 在 vscode 的加载过程中，有这样一行代码值得注意，它位于 main.js 文件中，而这是 Electron App 运行的入口文件：
+  
+  ```
+  require('./bootstrap-amd').load('vs/code/electron-main/main', () => {
+    // ...
+  });
+  ```
+- vs/code/election-main/main 是 vscode 应用的主入口，这句代码的意思是加载主入口文件并执行。bootstrap-amd 文件暴露的 load 方法则又调用了 vs/loader 文件暴露的 loader 方法：
+  
+  ```
+  const loader = require('./vs/loader')
+  
+  exports.load = function (entrypoint, onLoad, onError) {
+    // ...
+    loader([entrypoint], onLoad, onError);
+  };
+  ```
+- loader.js中，被默认执行的是以下的代码：
+  
+  ```
+  export function init(): void {
+        if (typeof global.require !== 'undefined' || typeof require !== 'undefined') {
+            // 将原本 node.js 的 require 函数保存在这个局部变量中
+            const _nodeRequire = (global.require || require);
+            if (typeof _nodeRequire === 'function' && typeof _nodeRequire.resolve === 'function') {
+                // 然后在 RequireFunc 上挂在原来的 require 函数
+                const nodeRequire = ensureRecordedNodeRequire(moduleManager.getRecorder(), _nodeRequire);
+                global.nodeRequire = nodeRequire;
+                (<any>RequireFunc).nodeRequire = nodeRequire;
+                (<any>RequireFunc).__$__nodeRequire = nodeRequire;
+            }
+        }
+  
+        // 在 node.js 环境中（非 Electron 渲染进程环境）
+        if (env.isNode && !env.isElectronRenderer) {
+            module.exports = RequireFunc; // vscode-loader.js 文件导出 RequireFunc
+            require = <any>RequireFunc; // patch 全局 require 函数
+        } else {
+            if (!env.isElectronRenderer) {
+                global.define = DefineFunc; // patch 全局 define 函数
+            }
+            global.require = RequireFunc; // patch 全局 require 函数
+        }
+    }
+  
+    if (typeof global.define !== 'function' || !global.define.amd) {
+        moduleManager = new ModuleManager(env, createScriptLoader(env), DefineFunc, RequireFunc, Utilities.getHighPerformanceTimestamp());
+  
+        // The global variable require can configure the loader
+        if (typeof global.require !== 'undefined' && typeof global.require !== 'function') {
+            RequireFunc.config(global.require);
+        }
+  
+        // This define is for the local closure defined in node in the case that the loader is concatenated
+        define = function () {
+            return DefineFunc.apply(null, arguments);
+        };
+        define.amd = DefineFunc.amd;
+  
+        if (typeof doNotInitLoader === 'undefined') {
+            init();
+        }
+    }
+  ```
+	- 创建了一个 ScriptLoader，即脚本加载器，脚本加载器因代码运行环境而异，有 NodeScriptLoaderWorkScriptLoader 和 BrowserScriptLoader 三种，负责加载 js 文件
+	- 定义了 DefineFunc 和 RequireFunc，即模块化系统中的 define 函数和 require 函数，分别用于定义和加载一个模块
+	- 创建了一个 ModuleManager，即模块管理器，它用于按照正确的顺序来解析 js 文件并执行
+	- 覆盖了全局作用域中的 define 以及 require 变量（node 原生 require 变量的值被保存在 _nodeRequire 变量中）
+- **总体来说，vscode-loader使用了IIFE，实现了对不同环境下的js代码的模块依赖加载。**
+- ### 5.2.3.  资料总结
+- [https://zhuanlan.zhihu.com/p/367639259](https://zhuanlan.zhihu.com/p/367639259) （vscode-loader）
+- vscode-loader源代码仓库：[https://github.com/microsoft/vscode-loader](https://github.com/microsoft/vscode-loader)
