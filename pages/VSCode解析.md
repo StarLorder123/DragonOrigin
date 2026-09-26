@@ -1966,3 +1966,171 @@
   
   ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1695542520394-56a8510e-50e1-42ce-9d17-f7032b575c1a.png)
 - 从图可以看出，从左侧调试UI消息到达对应调试器（Debugger）中间通过Adaptor层统一进行消息的转换，一旦调试相关的消息通讯协议达到一定完成度，工具侧便可无需进行任何修改支持多个调试器中的调试逻辑。
+- ### 5.3.4.  DAP实现解析
+- 当我们在vscode中启动调试模式，实则执行了下面的command
+  
+  ```
+  export const DEBUG_START_COMMAND_ID = 'workbench.action.debug.start';
+  ```
+- 在对应的handler中可以看到，启动调试前先判断当时是否是调试模式，如果否，则通过editorService保存修改过的代码，这里的launch就保存了vscode launch.json的地址。
+  
+  ```
+  const { launch, name, getConfig } = debugService.getConfigurationManager().selectedConfiguration;
+  ```
+- 获取完debug配置信息后，传参并执行debugService的startDebugging
+- Src/vs/workbench/contrib/debug/browser/debugservice.ts
+  
+  ```
+  await this.extensionService.activateByEvent('onDebug');//激活插件
+  ....//中间一大段都是解析launch.json的替代变量，以及判断debugger是否添加到this.adapterManager内的debugger数组中
+  await this.createSession（...）//这里有两种情况，一种是launch.json中含有compound，一种是不含有compound标签
+  //createSession作用解析launch.json,获取debug的类型，执行需要预处理的task
+  ```
+- 在createSession里我们需要注意的是这里
+  
+  ```
+  const result = await this.doCreateSession(sessionId, launch?.workspace, { resolved: resolvedConfig, unresolved: unresolvedConfig }, options);
+  //doCreateSession作用实例化新的session，并完成初始化，注册session的监听器
+  ```
+- 实例化session后便开始向DA发出初始化的请求了
+  
+  ```
+  await this.launchOrAttachToSession(session);
+  ......
+  private async launchOrAttachToSession(session: IDebugSession, forceFocus = false): Promise<void> {
+  const dbgr = this.adapterManager.getDebugger(session.configuration.type);
+  try {
+  await session.initialize(dbgr!);
+  await session.launchOrAttach(session.configuration);
+  const launchJsonExists = !!session.root && !!this.configurationService.getValue<IGlobalConfig>('launch', { resource: session.root.uri });
+  await this.telemetry.logDebugSessionStart(dbgr!, launchJsonExists);
+  ```
+- Src/vs/workbench/contrib/debug/browser/rawDebugSession.ts
+  
+  ```
+  DebugProtocol.InitializeRequestArguments): Promise<DebugProtocol.InitializeResponse | undefined> {
+  const response = await this.send('initialize', args, undefined, undefined, false);
+                //这里的send就是通过DAP发送请求给DA
+  if (response) {
+  	this.mergeCapabilities(response.body);
+  }
+  
+  return response;
+  }
+  ```
+- 这里千万要注意Debugsession中的initialize执行完后不是直接执行launch（这里留个小坑后面补），而是先去执行初始化结束后的回调函数
+  
+  ```
+  this.rawListeners.push(this.raw.onDidInitialize(async () => {
+  aria.status(localize('debuggingStarted', "Debugging started."));
+  const sendConfigurationDone = async () => {
+  	if (this.raw && this.raw.capabilities.supportsConfigurationDoneRequest) {
+  		try {
+  			await this.raw.configurationDone();
+  		} catch (e) {
+  			// Disconnect the debug session on configuration done error #10596
+  			this.notificationService.error(e);
+  			if (this.raw) {
+  				this.raw.disconnect({});
+  			}
+  		}
+  	}
+  
+  	return undefined;
+  };
+  
+  // Send all breakpoints
+  try {
+  	await this.debugService.sendAllBreakpoints(this);
+  } finally {
+  	await sendConfigurationDone();
+  	await this.fetchThreads();
+  }
+  }));
+  ```
+- DAP流程（[https://link.zhihu.com/?target=https%3A//microsoft.github.io/debug-adapter-protocol/overview](https://link.zhihu.com/?target=https%3A//microsoft.github.io/debug-adapter-protocol/overview)）
+- ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1709987768337-f1eeae50-e8fd-465d-b59e-18b644587a3e.png)
+- ### 5.3.5.  DAP和DA
+- DAP (Debug Adapter Protocol)具体的数据格式参考[这里](https://link.zhihu.com/?target=https%3A//microsoft.github.io/debug-adapter-protocol/specification)
+- DA（Debug Adapter）DA需要做些什么来通过DAP与vscode通信呢？
+- 首先我们先来看看DA的目录结构
+  
+  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1709989783310-1a2fd24a-1f19-4b7b-a7f8-9863c6a42648.png)
+- 这里只说明几个文件的作用
+	- debugSession.ts 分发请求、DA支持的功能等，自己可以通过继承该类实现自己的DA
+	- message.ts DA 响应数据的数据结构
+	- protocol.ts 处理接受的数据，响应请求、event的数据，通过DAP把数据发回给Vscode,
+	- runDebugAdapter.ts DA运行的方式
+- DA运行方式有两种
+	- 一种是通过node.js的.net模块来创建服务器，通过soket来传输参数
+	- 另一种进程，通过标准输入输出来传输参数
+	  
+	  ```
+	  if (port > 0) {
+	  // start as a server
+	  console.error(`waiting for debug protocol on port ${port}`);
+	  Net.createServer((socket) => {
+	  console.error('>> accepted connection from client');
+	  socket.on('end', () => {
+	  	console.error('>> client connection closed\n');
+	  });
+	  const session = new debugSession(false, true);
+	  session.setRunAsServer(true);
+	  session.start(socket, socket);
+	  }).listen(port);
+	  } else {
+	  
+	  // start a session
+	  //console.error('waiting for debug protocol on stdin/stdout');
+	  const session = new debugSession(false);
+	  process.on('SIGTERM', () => {
+	  session.shutdown();
+	  });
+	  session.start(process.stdin, process.stdout);
+	  }
+	  ```
+- 再来看看protocol.ts。start启动DA的session，监听输入输入流
+  
+  ```
+  public start(inStream: NodeJS.ReadableStream, outStream: NodeJS.WritableStream): void {
+  this._sequence = 1;
+  this._writableStream = outStream;
+  this._rawData = Buffer.alloc(0);
+  
+  inStream.on('data', (data: Buffer) => this._handleData(data));
+  
+  inStream.on('close', () => {
+  this._emitEvent(new Event('close'));
+  });
+  inStream.on('error', (error) => {
+  this._emitEvent(new Event('error', 'inStream error: ' + (error && error.message)));
+  });
+  
+  outStream.on('error', (error) => {
+  this._emitEvent(new Event('error', 'outStream error: ' + (error && error.message)));
+  });
+  
+  inStream.resume();
+  }
+  ```
+- 然后就是sendEvent、sendResponse、sendRequest了。它们都是通过
+  
+  ```
+  public onDidSendMessage: Event0<DebugProtocolMessage> = this._sendMessage.event;
+  ```
+- 来把数据传输给vscode。而在vscode端则是在创建DA的时候，注册ProtocolServer中的onDidSendMessage的事件。
+- Src/vs/workbench/api/common/extHostDebugService.ts
+  
+  ```
+  class DirectDebugAdapter extends AbstractDebugAdapter {
+  
+  constructor(private implementation: vscode.DebugAdapter) {
+  super();
+  
+  implementation.onDidSendMessage((message: vscode.DebugProtocolMessage) => {
+  	this.acceptMessage(message as DebugProtocol.ProtocolMessage);//这里接受DA的数据
+  });
+  }
+  .....
+  ```
+-
