@@ -657,6 +657,9 @@
 - ## 3.9.  Proxy代理
 - javascript中的proxy代理和java中的反射机制很像。
 - [[JavaScript Proxy解析]]
+- ## 3.10 MarkDown编辑器
+- [[MarkDown编辑器]]
+-
 - # 4.  VSCode中的基本概念
 - ## 4.1.  Disposable
 - Disposable 是一个非常重要和基础的概念的，它贯穿了整个 vscode 项目中，90% 的对象都是继承 Disposable，还有大量的实现 IDisposable 接口的对象。 Disposable 本身并没有做太多事情: 它是一个抽象类，提供了两个方法 _register （protected） 和 dispose (public)， 可以通过 dispose 方法把 _register 注册的 listener (IDispsable 对象) 给全部销毁。其核心的工作就是将继承Disposable的对象管理起来，再其销毁的时候销毁掉这个对象以及其依赖的对象，提高内存的利用率。
