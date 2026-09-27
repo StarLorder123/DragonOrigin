@@ -2133,4 +2133,600 @@
   }
   .....
   ```
--
+- ## 5.4.  Extension机制（扩展插件机制）
+- ### 5.4.1.  插件的加载
+- **插件宿主进程的加载**
+- 在src\vs\workbench\services\extensions\electron-sandbox\nativeExtensionService.ts文件中fork渲染进程，实例化ExtensionHostManager
+  
+  ```
+  class NativeExtensionService extends AbstractExtensionService implements IExtensionService {
+  constructor() {
+    ...
+  lifecycleService.when(LifecyclePhase.Ready).then(() => {
+  	// reschedule to ensure this runs after restoring viewlets, panels, and editors
+  	runWhenIdle(() => {
+  		this._initialize();
+  	}, 50 /*max delay*/);
+  });
+  }
+  ...
+  }
+  // src\vs\workbench\services\extensions\common\abstractExtensionService.ts
+  ......
+  protected async _initialize(): Promise<void> {
+  perf.mark('code/willLoadExtensions');
+  this._startExtensionHostsIfNecessary(true, []);
+  
+  const lock = await this._registry.acquireLock('_initialize');
+  try {
+  	const resolvedExtensions = await this._resolveExtensions();
+  
+  	this._processExtensions(lock, resolvedExtensions);
+  
+  	// Start extension hosts which are not automatically started
+  	const snapshot = this._registry.getSnapshot();
+  	for (const extHostManager of this._extensionHostManagers) {
+  		if (extHostManager.startup !== ExtensionHostStartup.EagerAutoStart) {
+  			const extensions = this._runningLocations.filterByExtensionHostManager(snapshot.extensions, extHostManager);
+  			extHostManager.start(snapshot.versionId, snapshot.extensions, extensions.map(extension => extension.identifier));
+  		}
+  	}
+  } finally {
+  	lock.dispose();
+  }
+  
+  this._releaseBarrier();
+  perf.mark('code/didLoadExtensions');
+  await this._handleExtensionTests();
+  }
+  ......
+  private _startExtensionHostsIfNecessary(isInitialStart: boolean, initialActivationEvents: string[]): void {
+  const locations: ExtensionRunningLocation[] = [];
+  for (let affinity = 0; affinity <= this._runningLocations.maxLocalProcessAffinity; affinity++) {
+  	locations.push(new LocalProcessRunningLocation(affinity));
+  }
+  for (let affinity = 0; affinity <= this._runningLocations.maxLocalWebWorkerAffinity; affinity++) {
+  	locations.push(new LocalWebWorkerRunningLocation(affinity));
+  }
+  locations.push(new RemoteRunningLocation());
+  for (const location of locations) {
+  	if (this._getExtensionHostManagerByRunningLocation(location)) {
+  		// already running
+  		continue;
+  	}
+  	const extHostManager = this._createExtensionHostManager(location, isInitialStart, initialActivationEvents);
+  	if (extHostManager) {
+  		this._extensionHostManagers.push(extHostManager);
+  	}
+  }
+  }
+  ......
+  ```
+- 在src/vs/workbench/services/extensions/common/extensionHostManager.ts文件中开始加载ExtensionHostProcess
+- 在src/vs/workbench/services/extensions/electron-browser/localProcessExtensionHost.ts中开始加载插件。
+- **创建插件进程**
+- src\vs\platform\extensions\common\extensionHostStarter.ts插件进程的接口定义
+- src\vs\platform\extensions\electron-main\extensionHostStarter.ts插件进程的接口实现
+- src\vs\platform\utilityProcess\electron-main\utilityProcess.ts插件进程流程的具体实现（在override start(configuration: IWindowUtilityProcessConfiguration): boolean函数方法里）
+- **激活插件**
+- src\vs\platform\extensionManagement\node\extensionsScannerService.ts  插件扫描入口
+- src\vs\platform\extensionManagement\common\extensionsScannerService.ts插件扫描逻辑的实现文件
+	- AbstractExtensionsScannerService类下定义了一系列关于扫描插件的类，主要包含了vscode自带在源码里的插件、product.json文件中builtInExtensions字段里的插件和系统用户.vscode里的插件。
+	- 激活插件的入口在src\vs\workbench\services\extensions\electron-sandbox\nativeExtensionService.ts文件下的745行
+- src\vs\workbench\api\common\extHostExtensionService.ts拿到插件数据之后，加载触发active接口
+	- private async _activateExtension是触发的入口函数
+	- _doActivateExtension是真正操作激活插件的函数方法
+	- _getEntryPoint读取插件中的package.json中main字段的入口函数
+	- AbstractExtHostExtensionService._callActivate插件入口加载完毕之后，触发active函数
+- ### 5.4.2.  插件宿主进程启动
+- 所谓插件主进程其实都是运行在插件宿主进程内的一个函数方法而已。因此可以说插件主进程都是运行在同一个进程中的。插件宿主进程又是一个工具进程，也可以认为是一个运行在nodejs中的进程。
+	- 众所周知，Electron框架中分为三种进程，一种是主进程，可以使用Electron中的api；一种是render进程，也就是渲染进程，可以使用一部分Electron中的api，加载了页面内容之后，就转为了v8引擎的环境；最后一种也就是跟render进程同一个级别的进程，也就是工具进程，是一种可以近似于视为运行在nodejs环境下的进程。
+- 插件宿主进程在主进程的起始位置在src\vs\workbench\workbench.desktop.main.ts位置中的 第88行位置。这是一个import文件的命令，因此进入到这个文件 src\vs\workbench\services\extensions\electron-sandbox\nativeExtensionService.ts之后，看到最后一行：
+  
+  ```
+  registerSingleton(IExtensionService, NativeExtensionService, InstantiationType.Eager);
+  ```
+- 这也就表示了，全局会注册并初始化唯一的一个NativeExtensionService。并且会在需要引用到这个类的时候会去初始化这个类。
+- 而真正在主进程中启动宿主插件进程的位置，在 **src\vs\platform\extensions\electron-main\extensionHostStarter.ts **位置中的100-117行内容中：
+  
+  ```
+  async start(id: string, opts: IExtensionHostProcessOptions): Promise<{ pid: number | undefined }> {
+  if (this._shutdown) {
+  	throw canceled();
+  }
+  const extHost = this._getExtHost(id);
+  extHost.start({
+  	...opts,
+  	type: 'extensionHost',
+  	entryPoint: 'vs/workbench/api/node/extensionHostProcess',
+  	args: ['--skipWorkspaceStorageLock'],
+  	execArgv: opts.execArgv,
+  	allowLoadingUnsignedLibraries: true,
+  	forceAllocationsToV8Sandbox: true,
+  	correlationId: id
+  });
+  const pid = await Event.toPromise(extHost.onSpawn);
+  return { pid };
+  }
+  ```
+- 这里面就确定了启动宿主插件进程的时候，需要传入的参数等等一系列的内容。也看到了启动插件宿主进程的起始位置：vs/workbench/api/node/extensionHostProcess
+- 来到这个文件中，我们可以看到这个文件真正运行的、最关键的一个方法和内容：
+  
+  ```
+  async function startExtensionHostProcess(): Promise<void> {
+  
+  // Print a console message when rejection isn't handled within N seconds. For details:
+  // see https://nodejs.org/api/process.html#process_event_unhandledrejection
+  // and https://nodejs.org/api/process.html#process_event_rejectionhandled
+  const unhandledPromises: Promise<any>[] = [];
+  process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  unhandledPromises.push(promise);
+  setTimeout(() => {
+  	const idx = unhandledPromises.indexOf(promise);
+  	if (idx >= 0) {
+  		promise.catch(e => {
+  			unhandledPromises.splice(idx, 1);
+  			if (!isCancellationError(e)) {
+  				console.warn(`rejected promise not handled within 1 second: ${e}`);
+  				if (e && e.stack) {
+  					console.warn(`stack trace: ${e.stack}`);
+  				}
+  				if (reason) {
+  					onUnexpectedError(reason);
+  				}
+  			}
+  		});
+  	}
+  }, 1000);
+  });
+  
+  process.on('rejectionHandled', (promise: Promise<any>) => {
+  const idx = unhandledPromises.indexOf(promise);
+  if (idx >= 0) {
+  	unhandledPromises.splice(idx, 1);
+  }
+  });
+  
+  // Print a console message when an exception isn't handled.
+  process.on('uncaughtException', function (err: Error) {
+  if (!isSigPipeError(err)) {
+  	onUnexpectedError(err);
+  }
+  });
+  
+  performance.mark(`code/extHost/willConnectToRenderer`);
+  const protocol = await createExtHostProtocol();
+  performance.mark(`code/extHost/didConnectToRenderer`);
+  const renderer = await connectToRenderer(protocol);
+  performance.mark(`code/extHost/didWaitForInitData`);
+  const { initData } = renderer;
+  // setup things
+  patchProcess(!!initData.environment.extensionTestsLocationURI); // to support other test frameworks like Jasmin that use process.exit (https://github.com/microsoft/vscode/issues/37708)
+  initData.environment.useHostProxy = args.useHostProxy !== undefined ? args.useHostProxy !== 'false' : undefined;
+  initData.environment.skipWorkspaceStorageLock = boolean(args.skipWorkspaceStorageLock, false);
+  
+  // host abstraction
+  const hostUtils = new class NodeHost implements IHostUtils {
+  declare readonly _serviceBrand: undefined;
+  public readonly pid = process.pid;
+  exit(code: number) { nativeExit(code); }
+  fsExists(path: string) { return Promises.exists(path); }
+  fsRealpath(path: string) { return realpath(path); }
+  };
+  
+  // Attempt to load uri transformer
+  let uriTransformer: IURITransformer | null = null;
+  if (initData.remote.authority && args.transformURIs) {
+  uriTransformer = createURITransformer(initData.remote.authority);
+  }
+  
+  const extensionHostMain = new ExtensionHostMain(
+  renderer.protocol,
+  initData,
+  hostUtils,
+  uriTransformer
+  );
+  
+  // rewrite onTerminate-function to be a proper shutdown
+  onTerminate = (reason: string) => extensionHostMain.terminate(reason);
+  }
+  
+  startExtensionHostProcess().catch((err) => console.log(err));
+  ```
+- 其实启动宿主进程的核心，在文件的395-400行（上述代码的68-72）。之前的代码都是在做准备工作，比如监听本进程的一些事件，构建通信等等。
+- 然后我们关注一下这个 **ExtensionHostMain** 类的构造函数：
+  
+  ```
+  constructor(
+  protocol: IMessagePassingProtocol,
+  initData: IExtensionHostInitData,
+  hostUtils: IHostUtils,
+  uriTransformer: IURITransformer | null,
+  messagePorts?: ReadonlyMap<string, MessagePort>
+  ) {
+  this._hostUtils = hostUtils;
+  this._rpcProtocol = new RPCProtocol(protocol, null, uriTransformer);
+  
+  // ensure URIs are transformed and revived
+  initData = ExtensionHostMain._transform(initData, this._rpcProtocol);
+  
+  // bootstrap services
+  const services = new ServiceCollection(...getSingletonServiceDescriptors());
+  services.set(IExtHostInitDataService, { _serviceBrand: undefined, ...initData, messagePorts });
+  services.set(IExtHostRpcService, new ExtHostRpcService(this._rpcProtocol));
+  services.set(IURITransformerService, new URITransformerService(uriTransformer));
+  services.set(IHostUtils, hostUtils);
+  
+  const instaService: IInstantiationService = new InstantiationService(services, true);
+  
+  instaService.invokeFunction(ErrorHandler.installEarlyHandler);
+  
+  // ugly self - inject
+  this._logService = instaService.invokeFunction(accessor => accessor.get(ILogService));
+  
+  performance.mark(`code/extHost/didCreateServices`);
+  if (this._hostUtils.pid) {
+  	this._logService.info(`Extension host with pid ${this._hostUtils.pid} started`);
+  } else {
+  	this._logService.info(`Extension host started`);
+  }
+  this._logService.trace('initData', initData);
+  
+  // ugly self - inject
+  // must call initialize *after* creating the extension service
+  // because `initialize` itself creates instances that depend on it
+  this._extensionService = instaService.invokeFunction(accessor => accessor.get(IExtHostExtensionService));
+  this._extensionService.initialize();
+  
+  // install error handler that is extension-aware
+  instaService.invokeFunction(ErrorHandler.installFullHandler);
+  }
+  ```
+- 最关键的初始化，就在 this._extensionService.initialize() 这一句中。看一下这个方法的具体实现：
+  
+  ```
+  public async initialize(): Promise<void> {
+  try {
+  
+  	await this._beforeAlmostReadyToRunExtensions();
+  	this._almostReadyToRunExtensions.open();
+  
+  	await this._extHostWorkspace.waitForInitializeCall();
+  	performance.mark('code/extHost/ready');
+  	this._readyToStartExtensionHost.open();
+  
+  	if (this._initData.autoStart) {
+  		this._startExtensionHost();
+  	}
+  } catch (err) {
+  	errors.onUnexpectedError(err);
+  }
+  }
+  ```
+	- 这个实现还不好找。跳转之后，首先是一个接口实现。再次跳转就失效了。但是具体的实现就在那个文件内，可以使用文件内搜索。
+- 根据这段代码的命名方式，我们可以看出来，宿主进程的启动在 this._startExtensionHost() 中。
+  
+  ```
+  private _startExtensionHost(): Promise<void> {
+  if (this._started) {
+  	throw new Error(`Extension host is already started!`);
+  }
+  this._started = true;
+  
+  return this._readyToStartExtensionHost.wait()
+  	.then(() => this._readyToRunExtensions.open())
+  	.then(() => {
+  		// wait for all activation events that came in during workbench startup, but at maximum 1s
+  		return Promise.race([this._activator.waitForActivatingExtensions(), timeout(1000)]);
+  	})
+  	.then(() => this._handleEagerExtensions())
+  	.then(() => {
+  		this._eagerExtensionsActivated.open();
+  		this._logService.info(`Eager extensions activated`);
+  	});
+  }
+  ```
+- 插件宿主进程其实到这个阶段已经初始化的差不多了，也就是准备的差不多了。那么插件宿主进程最最重要的任务是什么？那就是**加载插件**！在这个阶段，其实就是需要加载各种各样需要加载的插件。
+- 这里面比较重要的一个方法就是：this._handleEagerExtensions()。这是最早一批插件加载的入口。
+  
+  ```
+  private _handleEagerExtensions(): Promise<void> {
+  const starActivation = this._activateByEvent('*', true).then(undefined, (err) => {
+  	this._logService.error(err);
+  });
+  
+  this._register(this._extHostWorkspace.onDidChangeWorkspace((e) => this._handleWorkspaceContainsEagerExtensions(e.added)));
+  const folders = this._extHostWorkspace.workspace ? this._extHostWorkspace.workspace.folders : [];
+  const workspaceContainsActivation = this._handleWorkspaceContainsEagerExtensions(folders);
+  const remoteResolverActivation = this._handleRemoteResolverEagerExtensions();
+  const eagerExtensionsActivation = Promise.all([remoteResolverActivation, starActivation, workspaceContainsActivation]).then(() => { });
+  
+  Promise.race([eagerExtensionsActivation, timeout(10000)]).then(() => {
+  	this._activateAllStartupFinished();
+  });
+  
+  return eagerExtensionsActivation;
+  }
+  ```
+- 这里面我们可以关注到 this._activateByEvent('*', true) 这样一句。这句话就预示着，这里面就是加载各种各样event为*的插件。而_activateByEvent就是加载各种各样插件的具体操作方法！
+- 我们顺藤摸瓜，一路找到位于src\vs\workbench\api\common\extHostExtensionActivator.ts文件中的activateByEvent方法：
+  
+  ```
+  public async activateByEvent(activationEvent: string, startup: boolean): Promise<void> {
+  if (this._alreadyActivatedEvents[activationEvent]) {
+  	return;
+  }
+  
+  const activateExtensions = this._registry.getExtensionDescriptionsForActivationEvent(activationEvent);
+  await this._activateExtensions(activateExtensions.map(e => ({
+  	id: e.identifier,
+  	reason: { startup, extensionId: e.identifier, activationEvent }
+  })));
+  
+  this._alreadyActivatedEvents[activationEvent] = true;
+  }
+  ```
+- 那么我们也可以看到具体的插件激活的方法 this._activateExtensions 。再次继续下去。
+  
+  ```
+  private async _activateExtensions(extensions: ActivationIdAndReason[]): Promise<void> {
+  const operations = extensions
+  	.filter((p) => !this.isActivated(p.id))
+  	.map(ext => this._handleActivationRequest(ext));
+  await Promise.all(operations.map(op => op.wait()));
+  }
+  ```
+- 我们需要继续追踪_handleActivationRequest。找到这个方法之后，可以看到里面就比较长了。
+  
+  ```
+  private _handleActivationRequest(currentActivation: ActivationIdAndReason): ActivationOperation {
+  if (this._operations.has(currentActivation.id)) {
+  	return this._operations.get(currentActivation.id)!;
+  }
+  
+  if (this._isHostExtension(currentActivation.id)) {
+  	return this._createAndSaveOperation(currentActivation, null, [], null);
+  }
+  
+  const currentExtension = this._registry.getExtensionDescription(currentActivation.id);
+  if (!currentExtension) {
+  	// Error condition 0: unknown extension
+  	const error = new Error(`Cannot activate unknown extension '${currentActivation.id.value}'`);
+  	const result = this._createAndSaveOperation(currentActivation, null, [], new FailedExtension(error));
+  	this._host.onExtensionActivationError(
+  		currentActivation.id,
+  		error,
+  		new MissingExtensionDependency(currentActivation.id.value)
+  	);
+  	return result;
+  }
+  
+  const deps: ActivationOperation[] = [];
+  const depIds = (typeof currentExtension.extensionDependencies === 'undefined' ? [] : currentExtension.extensionDependencies);
+  for (const depId of depIds) {
+  
+  	if (this._isResolvedExtension(depId)) {
+  		// This dependency is already resolved
+  		continue;
+  	}
+  
+  	const dep = this._operations.get(depId);
+  	if (dep) {
+  		deps.push(dep);
+  		continue;
+  	}
+  
+  	if (this._isHostExtension(depId)) {
+  		// must first wait for the dependency to activate
+  		deps.push(this._handleActivationRequest({
+  			id: this._globalRegistry.getExtensionDescription(depId)!.identifier,
+  			reason: currentActivation.reason
+  		}));
+  		continue;
+  	}
+  
+  	const depDesc = this._registry.getExtensionDescription(depId);
+  	if (depDesc) {
+  		if (!depDesc.main && !depDesc.browser) {
+  			// this dependency does not need to activate because it is descriptive only
+  			continue;
+  		}
+  
+  		// must first wait for the dependency to activate
+  		deps.push(this._handleActivationRequest({
+  			id: depDesc.identifier,
+  			reason: currentActivation.reason
+  		}));
+  		continue;
+  	}
+  
+  	// Error condition 1: unknown dependency
+  	const currentExtensionFriendlyName = currentExtension.displayName || currentExtension.identifier.value;
+  	const error = new Error(`Cannot activate the '${currentExtensionFriendlyName}' extension because it depends on unknown extension '${depId}'`);
+  	const result = this._createAndSaveOperation(currentActivation, currentExtension.displayName, [], new FailedExtension(error));
+  	this._host.onExtensionActivationError(
+  		currentExtension.identifier,
+  		error,
+  		new MissingExtensionDependency(depId)
+  	);
+  	return result;
+  }
+  
+  return this._createAndSaveOperation(currentActivation, currentExtension.displayName, deps, null);
+  }
+  ```
+- 其实这么长的代码中，我们不能一下就看到真正启动插件的下一个入口在哪里。但是我们可以从返回上来看，那就是基本锁定，_createAndSaveOperation方法。但是这个方法中其实就干了一个事，那就是等待初始化 ActivationOperation 这样一个对象。一开始，我觉得不可思议，怎么可能呢？但是排查到最后，真就是这里。
+- 这个对象的构造函数中有一个_initialize方法。方法中只有一个值得细看，那就是_waitForDepsThenActivate方法。
+  
+  ```
+  private async _waitForDepsThenActivate(): Promise<void> {
+  if (this._value) {
+  	// this operation is already finished
+  	return;
+  }
+  
+  while (this._deps.length > 0) {
+  	// remove completed deps
+  	for (let i = 0; i < this._deps.length; i++) {
+  		const dep = this._deps[i];
+  
+  		if (dep.value && !dep.value.activationFailed) {
+  			// the dependency is already activated OK
+  			this._deps.splice(i, 1);
+  			i--;
+  			continue;
+  		}
+  
+  		if (dep.value && dep.value.activationFailed) {
+  			// Error condition 2: a dependency has already failed activation
+  			const error = new Error(`Cannot activate the '${this.friendlyName}' extension because its dependency '${dep.friendlyName}' failed to activate`);
+  			(<any>error).detail = dep.value.activationFailedError;
+  			this._value = new FailedExtension(error);
+  			this._host.onExtensionActivationError(this._id, error, null);
+  			return;
+  		}
+  	}
+  
+  	if (this._deps.length > 0) {
+  		// wait for one dependency
+  		await Promise.race(this._deps.map(dep => dep.wait()));
+  	}
+  }
+  
+  await this._activate();
+  }
+  
+  private async _activate(): Promise<void> {
+  try {
+  	this._value = await this._host.actualActivateExtension(this._id, this._reason);
+  } catch (err) {
+  
+  	const error = new Error();
+  	if (err && err.name) {
+  		error.name = err.name;
+  	}
+  	if (err && err.message) {
+  		error.message = `Activating extension '${this._id.value}' failed: ${err.message}.`;
+  	} else {
+  		error.message = `Activating extension '${this._id.value}' failed: ${err}.`;
+  	}
+  	if (err && err.stack) {
+  		error.stack = err.stack;
+  	}
+  
+  	// Treat the extension as being empty
+  	this._value = new FailedExtension(error);
+  
+  	if (this._isDisposed && errors.isCancellationError(err)) {
+  		// It is expected for ongoing activations to fail if the extension host is going down
+  		// So simply ignore and don't log canceled errors in this case
+  		return;
+  	}
+  
+  	this._host.onExtensionActivationError(this._id, error, null);
+  	this._logService.error(`Activating extension ${this._id.value} failed due to an error:`);
+  	this._logService.error(err);
+  }
+  }
+  ```
+- 上述代码中有两个方法，这两个方法就是具体激活的地方。这里就离真正启动插件主进程的地方很近很近了！也就是actualActivateExtension。这个方法定义的地方也很鸡贼，不是特别的寻常。
+  
+  ```
+  this._activator = this._register(new ExtensionsActivator(
+  	this._myRegistry,
+  	this._globalRegistry,
+  	{
+  		onExtensionActivationError: (extensionId: ExtensionIdentifier, error: Error, missingExtensionDependency: MissingExtensionDependency | null): void => {
+  			this._mainThreadExtensionsProxy.$onExtensionActivationError(extensionId, errors.transformErrorForSerialization(error), missingExtensionDependency);
+  		},
+  
+  		actualActivateExtension: async (extensionId: ExtensionIdentifier, reason: ExtensionActivationReason): Promise<ActivatedExtension> => {
+  			if (ExtensionDescriptionRegistry.isHostExtension(extensionId, this._myRegistry, this._globalRegistry)) {
+  				await this._mainThreadExtensionsProxy.$activateExtension(extensionId, reason);
+  				return new HostExtension();
+  			}
+  			const extensionDescription = this._myRegistry.getExtensionDescription(extensionId)!;
+  			return this._activateExtension(extensionDescription, reason);
+  		}
+  	},
+  	this._logService
+  ));
+  ```
+- 也就是说实在extHostExtensionActivator创建的时候，作为初始化参数传进去的。
+- 我们随着this._activateExtension这个线继续。后续我们会找到_doActivateExtension这个方法
+  
+  ```
+  private _doActivateExtension(extensionDescription: IExtensionDescription, reason: ExtensionActivationReason): Promise<ActivatedExtension> {
+  const event = getTelemetryActivationEvent(extensionDescription, reason);
+  type ActivatePluginClassification = {
+  	owner: 'jrieken';
+  	comment: 'Data about how/why an extension was activated';
+  } & TelemetryActivationEventFragment;
+  this._mainThreadTelemetryProxy.$publicLog2<TelemetryActivationEvent, ActivatePluginClassification>('activatePlugin', event);
+  const entryPoint = this._getEntryPoint(extensionDescription);
+  if (!entryPoint) {
+  	// Treat the extension as being empty => NOT AN ERROR CASE
+  	return Promise.resolve(new EmptyExtension(ExtensionActivationTimes.NONE));
+  }
+  
+  this._logService.info(`ExtensionService#_doActivateExtension ${extensionDescription.identifier.value}, startup: ${reason.startup}, activationEvent: '${reason.activationEvent}'${extensionDescription.identifier.value !== reason.extensionId.value ? `, root cause: ${reason.extensionId.value}` : ``}`);
+  this._logService.flush();
+  
+  const activationTimesBuilder = new ExtensionActivationTimesBuilder(reason.startup);
+  return Promise.all([
+  	this._loadCommonJSModule<IExtensionModule>(extensionDescription, joinPath(extensionDescription.extensionLocation, entryPoint), activationTimesBuilder),
+  	this._loadExtensionContext(extensionDescription)
+  ]).then(values => {
+  	performance.mark(`code/extHost/willActivateExtension/${extensionDescription.identifier.value}`);
+  	return AbstractExtHostExtensionService._callActivate(this._logService, extensionDescription.identifier, values[0], values[1], activationTimesBuilder);
+  }).then((activatedExtension) => {
+  	performance.mark(`code/extHost/didActivateExtension/${extensionDescription.identifier.value}`);
+  	return activatedExtension;
+  });
+  }
+  ```
+- 这里最重要的部分，莫过于最终的Promise.all中的一些内容了。这里面的大致流程就是：
+	- 1. 加载JS模块和加载插件所需要的上下文。
+	- 2. 激活插件
+	- 3. 返回激活插件的信息
+- 那么激活插件的具体步骤就在这第2步里面了：
+  
+  ```
+  private static _callActivate(logService: ILogService, extensionId: ExtensionIdentifier, extensionModule: IExtensionModule, context: vscode.ExtensionContext, activationTimesBuilder: ExtensionActivationTimesBuilder): Promise<ActivatedExtension> {
+  // Make sure the extension's surface is not undefined
+  extensionModule = extensionModule || {
+  	activate: undefined,
+  	deactivate: undefined
+  };
+  
+  return this._callActivateOptional(logService, extensionId, extensionModule, context, activationTimesBuilder).then((extensionExports) => {
+  	return new ActivatedExtension(false, null, activationTimesBuilder.build(), extensionModule, extensionExports, context.subscriptions);
+  });
+  }
+  
+  private static _callActivateOptional(logService: ILogService, extensionId: ExtensionIdentifier, extensionModule: IExtensionModule, context: vscode.ExtensionContext, activationTimesBuilder: ExtensionActivationTimesBuilder): Promise<IExtensionAPI> {
+  if (typeof extensionModule.activate === 'function') {
+  	try {
+  		activationTimesBuilder.activateCallStart();
+  		logService.trace(`ExtensionService#_callActivateOptional ${extensionId.value}`);
+  		const scope = typeof global === 'object' ? global : self; // `global` is nodejs while `self` is for workers
+  		const activateResult: Promise<IExtensionAPI> = extensionModule.activate.apply(scope, [context]);
+  		activationTimesBuilder.activateCallStop();
+  
+  		activationTimesBuilder.activateResolveStart();
+  		return Promise.resolve(activateResult).then((value) => {
+  			activationTimesBuilder.activateResolveStop();
+  			return value;
+  		});
+  	} catch (err) {
+  		return Promise.reject(err);
+  	}
+  } else {
+  	// No activate found => the module is the extension's exports
+  	return Promise.resolve<IExtensionAPI>(extensionModule);
+  }
+  }
+  ```
+- 在这里面就可以看到最最关键的一步了： extensionModule.activate.apply(scope, [context]);
+- 这一步就是启动插件的步骤了。这也是为什么插件中，入口文件的起始函数名字必须要activate。这里也解释了为什么vscode模块可以被引入到插件中。因为本质上，插件主进程就是运行在一个由vscode构建上下文的方法。
+- 到此为止，其实就可以基本确定和知道，所有插件的主进程都是在一个进程中的。因此，插件的主进程只不过是插件宿主进程中的一个线程罢了。如果线程过多，插件过多，势必会影响到应用的运行。

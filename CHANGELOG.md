@@ -4,6 +4,7 @@
 
 ### Documentation
 
+- Add VSCode extension mechanism note (`pages/VSCode解析.md`) covering plugin loading (NativeExtensionService initialization, extension host managers, and host process forking), extension host process startup (host process as a Node.js utility process launched from the `extensionHostProcess` entry point), and plugin activation (`_activateExtension` → `_doActivateExtension` → `_getEntryPoint` → `_callActivate` invoking `extensionModule.activate.apply`)
 - Add LSP and DAP protocol notes to `pages/VSCode解析.md` covering the Language Server Protocol (client/server split, `vscode-languageclient`/`vscode-languageserver`, the `lsp-sample` demo's `extension.ts` client and `server.ts` server) and the Debug Adapter Protocol (adapter layer abstracting debugger/runtime communication)
 - Add VSCode IoC/DI implementation and AMD loader note (`pages/VSCode解析.md`) covering the `createDecorator` / `storeServiceDependency` internals, the `$di$dependencies` / `$di$target` magic strings, and the AMD vs CMD module systems plus `vscode-loader`'s `ScriptLoader` / `ModuleManager` and global `define`/`require` patching
 - Add IoC and dependency injection note (`pages/VSCode解析.md`) covering the inversion-of-control principle, the dependency-injection design pattern, VSCode's service-based architecture, service identifiers/`createDecorator`, the `InstantiationService` container, `SyncDescriptor`, and `createInstance` / `invokeFunction` / `createChild` usage
