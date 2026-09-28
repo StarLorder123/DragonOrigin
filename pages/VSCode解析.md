@@ -2730,3 +2730,46 @@
 - 在这里面就可以看到最最关键的一步了： extensionModule.activate.apply(scope, [context]);
 - 这一步就是启动插件的步骤了。这也是为什么插件中，入口文件的起始函数名字必须要activate。这里也解释了为什么vscode模块可以被引入到插件中。因为本质上，插件主进程就是运行在一个由vscode构建上下文的方法。
 - 到此为止，其实就可以基本确定和知道，所有插件的主进程都是在一个进程中的。因此，插件的主进程只不过是插件宿主进程中的一个线程罢了。如果线程过多，插件过多，势必会影响到应用的运行。
+- ### 5.4.3.  奇特的vscode模块
+- 在编写插件的时候，会经常用到vscode这一个模块。实际上这是一个虚拟模块，是不存在的。
+- 通过对require('vscode')的过程进行debug，可以发现问题。
+  
+  ```
+  // ref: src/vs/workbench/api/node/extHost.api.impl.ts
+  function defineAPI(factory: IExtensionApiFactory, extensionPaths: TernarySearchTree<IExtensionDescription>): void {
+  
+  // each extension is meant to get its own api implementation
+  const extApiImpl = new Map<string, typeof vscode>();
+  let defaultApiImpl: typeof vscode;
+  
+  const node_module = <any>require.__$__nodeRequire('module');
+  const original = node_module._load;
+  node_module._load = function load(request, parent, isMain) {
+    if (request !== 'vscode') {
+      return original.apply(this, arguments);
+    }
+  
+    // get extension id from filename and api for extension
+    const ext = extensionPaths.findSubstr(parent.filename);
+    if (ext) {
+      let apiImpl = extApiImpl.get(ext.id);
+      if (!apiImpl) {
+        apiImpl = factory(ext);
+        extApiImpl.set(ext.id, apiImpl);
+      }
+      return apiImpl;
+    }
+  
+    // fall back to a default implementation
+    if (!defaultApiImpl) {
+      defaultApiImpl = factory(nullExtensionDescription);
+    }
+    return defaultApiImpl;
+  };
+  }
+  ```
+- Module._load()方法被劫持了，遇到vscode返回一个apiImpl虚拟模块。注意，每个插件拿到的VSCODE  API都是单独的实例。
+- 从上面插件宿主进程的启动流程中也可以一窥究竟。vscode模块实际上就是一个d.ts。就好比是C++中的头文件，只是声明了有哪些方法可以调用，以及这些方法中有什么样的参数。实际实现并不在其中。
+- ### 5.4.4.  有限扩展的插件
+- VSCode 中对外的插件是 extension，使用的都是 VSCode 开放的 api 来交互，能使用的能力是被约束和规范化的。而内部内置的插件是 contrib，它通过调用一系列更加底层的 API 来扩展 VSCode 的能力，代码在相应层的 contrib下存放。
+- 也就是说，在VSCode内部存在着两部分的扩展机制。这里就可以更加深入的去研究插件和框架的设计边界和协同。
