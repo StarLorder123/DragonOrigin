@@ -2773,3 +2773,474 @@
 - ### 5.4.4.  有限扩展的插件
 - VSCode 中对外的插件是 extension，使用的都是 VSCode 开放的 api 来交互，能使用的能力是被约束和规范化的。而内部内置的插件是 contrib，它通过调用一系列更加底层的 API 来扩展 VSCode 的能力，代码在相应层的 contrib下存放。
 - 也就是说，在VSCode内部存在着两部分的扩展机制。这里就可以更加深入的去研究插件和框架的设计边界和协同。
+- ## 5.5.  VSCode进程间通信构建过程详解
+- ### 5.5.1.  基于MessagePortMain（通信桥）的通信实现
+- 根据[Electron的文档](https://www.electronjs.org/zh/docs/latest/api/message-port-main)，我们可以知道，在Electron框架中实现进程间通信有两种方式，第一种是常见的IPCMain和IPCRender，这是主进程和渲染进程或者是工具进程（UtilityProcess）的通信通道，特点是通信所有权不可转让。第二种就是MessagePortMain，也就是通信桥。其最大的特点就是通信所有权可以转让，实现更加灵活。
+- 看如下的源码：
+  
+  ```
+  connect(payload?: unknown): Electron.MessagePortMain {
+  const { port1: outPort, port2: utilityProcessPort } = new MessageChannelMain();
+  this.postMessage(payload, [utilityProcessPort]);
+  
+  return outPort;
+  }
+  ```
+	- 这段代码是在主进程中运行的。主要的功能就是创建一个和子进程联通的通信桥，然后将主进程端的通信所有权移交给其他进程。
+- 第一种通信实现，是基于Electron IPC的，而第二种则是基于Node IPC了。这也是5.3节中为什么渲染进程和共享进程以及渲染进程和Extension Host等之间的通信是Node IPC。这是因为主进程不仅创建了对应的子进程，而且通过这种通信桥的通信实现，将对应的沟通通道转接了其他的进程。
+- ### 5.5.2.  Caller-Service机制
+  
+  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1709349158444-2597db9a-32ce-4e0b-a3a6-eeaa5aee1061.png)
+- VSCode的很多概念都被包装成了Service，因此这一小节讲一下Caller-Service机制，即服务调用的最基本的机制。
+- 部分Service实际上是基于IServerChannel进行了包裹，本质上就是一个对Caller（请求方）的进行响应的Service。结合3.3.1节的描述，可以做出如下的结论：
+	- Protocol是基于不同场景下实现的真实通信信道，比如：基于Electron的ipcMain和ipcRender构建的信道，或者基于Electron的MessagePortMain构建的信道，这些都是框架赋予的基本信道，是真实存在的，而其他的概念都是基于逻辑衍生出来的逻辑处理。
+	- IChannel是一个请求发送的请求者，Client就是实际发送请求的人。Client除了替IChannel发送请求之外，在具体的是线上，Client还会保存一个接收到响应之后的handler，用于处理收到对应的响应消息。
+	- IServerChannel是一个与IChannel相对应的请求处理者，IChannelServer是根据传过来的消息，将请求发送给对应ServerChannel处理的请求路由。
+	- Service和Caller就是分别基于IServerChannel和IChannel构建出来的具体的服务逻辑。
+	- Caller-Service机制就是一个请求-响应-处理响应的单向消息传递机制。
+- ### 5.5.3.  ChannelClient-ChannelServer源码解析
+- 首先看ChannelClient的源码：
+  
+  ```
+  export class ChannelClient implements IChannelClient, IDisposable {
+  
+  private isDisposed: boolean = false;
+  private state: State = State.Uninitialized;
+  private activeRequests = new Set<IDisposable>();
+  private handlers = new Map<number, IHandler>();
+  private lastRequestId: number = 0;
+  private protocolListener: IDisposable | null;
+  private logger: IIPCLogger | null;
+  
+  private readonly _onDidInitialize = new Emitter<void>();
+  readonly onDidInitialize = this._onDidInitialize.event;
+  
+  constructor(private protocol: IMessagePassingProtocol, logger: IIPCLogger | null = null) {
+  this.protocolListener = this.protocol.onMessage(msg => this.onBuffer(msg));
+  this.logger = logger;
+  }
+  
+  getChannel<T extends IChannel>(channelName: string): T {
+  const that = this;
+  
+  return {
+  	call(command: string, arg?: any, cancellationToken?: CancellationToken) {
+  		if (that.isDisposed) {
+  			return Promise.reject(new CancellationError());
+  		}
+  		return that.requestPromise(channelName, command, arg, cancellationToken);
+  	},
+  	listen(event: string, arg: any) {
+  		if (that.isDisposed) {
+  			return Event.None;
+  		}
+  		return that.requestEvent(channelName, event, arg);
+  	}
+  } as T;
+  }
+  
+  private requestPromise(channelName: string, name: string, arg?: any, cancellationToken = CancellationToken.None): Promise<any> {
+  const id = this.lastRequestId++;
+  const type = RequestType.Promise;
+  const request: IRawRequest = { id, type, channelName, name, arg };
+  
+  if (cancellationToken.isCancellationRequested) {
+  	return Promise.reject(new CancellationError());
+  }
+  
+  let disposable: IDisposable;
+  
+  const result = new Promise((c, e) => {
+  	if (cancellationToken.isCancellationRequested) {
+  		return e(new CancellationError());
+  	}
+  
+  	const doRequest = () => {
+  		const handler: IHandler = response => {
+  			switch (response.type) {
+  				case ResponseType.PromiseSuccess:
+  					this.handlers.delete(id);
+  					c(response.data);
+  					break;
+  
+  				case ResponseType.PromiseError: {
+  					this.handlers.delete(id);
+  					const error = new Error(response.data.message);
+  					(<any>error).stack = Array.isArray(response.data.stack) ? response.data.stack.join('\n') : response.data.stack;
+  					error.name = response.data.name;
+  					e(error);
+  					break;
+  				}
+  				case ResponseType.PromiseErrorObj:
+  					this.handlers.delete(id);
+  					e(response.data);
+  					break;
+  			}
+  		};
+  
+  		this.handlers.set(id, handler);
+  		this.sendRequest(request);
+  	};
+  
+  	let uninitializedPromise: CancelablePromise<void> | null = null;
+  	if (this.state === State.Idle) {
+  		doRequest();
+  	} else {
+  		uninitializedPromise = createCancelablePromise(_ => this.whenInitialized());
+  		uninitializedPromise.then(() => {
+  			uninitializedPromise = null;
+  			doRequest();
+  		});
+  	}
+  
+  	const cancel = () => {
+  		if (uninitializedPromise) {
+  			uninitializedPromise.cancel();
+  			uninitializedPromise = null;
+  		} else {
+  			this.sendRequest({ id, type: RequestType.PromiseCancel });
+  		}
+  
+  		e(new CancellationError());
+  	};
+  
+  	const cancellationTokenListener = cancellationToken.onCancellationRequested(cancel);
+  	disposable = combinedDisposable(toDisposable(cancel), cancellationTokenListener);
+  	this.activeRequests.add(disposable);
+  });
+  
+  return result.finally(() => {
+  	disposable.dispose();
+  	this.activeRequests.delete(disposable);
+  });
+  }
+  
+  private requestEvent(channelName: string, name: string, arg?: any): Event<any> {
+  const id = this.lastRequestId++;
+  const type = RequestType.EventListen;
+  const request: IRawRequest = { id, type, channelName, name, arg };
+  
+  let uninitializedPromise: CancelablePromise<void> | null = null;
+  
+  const emitter = new Emitter<any>({
+  	onWillAddFirstListener: () => {
+  		uninitializedPromise = createCancelablePromise(_ => this.whenInitialized());
+  		uninitializedPromise.then(() => {
+  			uninitializedPromise = null;
+  			this.activeRequests.add(emitter);
+  			this.sendRequest(request);
+  		});
+  	},
+  	onDidRemoveLastListener: () => {
+  		if (uninitializedPromise) {
+  			uninitializedPromise.cancel();
+  			uninitializedPromise = null;
+  		} else {
+  			this.activeRequests.delete(emitter);
+  			this.sendRequest({ id, type: RequestType.EventDispose });
+  		}
+  	}
+  });
+  
+  const handler: IHandler = (res: IRawResponse) => emitter.fire((res as IRawEventFireResponse).data);
+  this.handlers.set(id, handler);
+  
+  return emitter.event;
+  }
+  
+  private sendRequest(request: IRawRequest): void {
+  switch (request.type) {
+  	case RequestType.Promise:
+  	case RequestType.EventListen: {
+  		const msgLength = this.send([request.type, request.id, request.channelName, request.name], request.arg);
+  		this.logger?.logOutgoing(msgLength, request.id, RequestInitiator.LocalSide, `${requestTypeToStr(request.type)}: ${request.channelName}.${request.name}`, request.arg);
+  		return;
+  	}
+  
+  	case RequestType.PromiseCancel:
+  	case RequestType.EventDispose: {
+  		const msgLength = this.send([request.type, request.id]);
+  		this.logger?.logOutgoing(msgLength, request.id, RequestInitiator.LocalSide, requestTypeToStr(request.type));
+  		return;
+  	}
+  }
+  }
+  
+  private send(header: any, body: any = undefined): number {
+  const writer = new BufferWriter();
+  serialize(writer, header);
+  serialize(writer, body);
+  return this.sendBuffer(writer.buffer);
+  }
+  
+  private sendBuffer(message: VSBuffer): number {
+  try {
+  	this.protocol.send(message);
+  	return message.byteLength;
+  } catch (err) {
+  	// noop
+  	return 0;
+  }
+  }
+  
+  private onBuffer(message: VSBuffer): void {
+  const reader = new BufferReader(message);
+  const header = deserialize(reader);
+  const body = deserialize(reader);
+  const type: ResponseType = header[0];
+  
+  switch (type) {
+  	case ResponseType.Initialize:
+  		this.logger?.logIncoming(message.byteLength, 0, RequestInitiator.LocalSide, responseTypeToStr(type));
+  		return this.onResponse({ type: header[0] });
+  
+  	case ResponseType.PromiseSuccess:
+  	case ResponseType.PromiseError:
+  	case ResponseType.EventFire:
+  	case ResponseType.PromiseErrorObj:
+  		this.logger?.logIncoming(message.byteLength, header[1], RequestInitiator.LocalSide, responseTypeToStr(type), body);
+  		return this.onResponse({ type: header[0], id: header[1], data: body });
+  }
+  }
+  
+  private onResponse(response: IRawResponse): void {
+  if (response.type === ResponseType.Initialize) {
+  	this.state = State.Idle;
+  	this._onDidInitialize.fire();
+  	return;
+  }
+  
+  const handler = this.handlers.get(response.id);
+  
+  handler?.(response);
+  }
+  
+  @memoize
+  get onDidInitializePromise(): Promise<void> {
+  return Event.toPromise(this.onDidInitialize);
+  }
+  
+  private whenInitialized(): Promise<void> {
+  if (this.state === State.Idle) {
+  	return Promise.resolve();
+  } else {
+  	return this.onDidInitializePromise;
+  }
+  }
+  
+  dispose(): void {
+  this.isDisposed = true;
+  if (this.protocolListener) {
+  	this.protocolListener.dispose();
+  	this.protocolListener = null;
+  }
+  dispose(this.activeRequests.values());
+  this.activeRequests.clear();
+  }
+  }
+  ```
+	- 上述是一个比较通用的ChannelClient的实现。可以看到ChannelClient实现了IChannelClient接口，也就是实现了getChannel这个方法。可以看出来，getChannel是一个闭包的方法，是将ChannelClient内的方法暴露给外界使用，并且内存中只有一个Client对象，并且ChannelClient可以根据传入的不同IChannel，调用不同的请求方式。
+	- 在构造函数中，也可以看到，这个Client对信道进行了onMessage的监听。
+	- 在这个实现中，有一个handlers的Map对象。这个对象用于在发送请求时，存储一个响应返回后的Handler，用于处理响应。
+- 其次看ChannelServer的源码：
+  
+  ```
+  export class ChannelServer<TContext = string> implements IChannelServer<TContext>, IDisposable {
+  
+  private channels = new Map<string, IServerChannel<TContext>>();
+  private activeRequests = new Map<number, IDisposable>();
+  private protocolListener: IDisposable | null;
+  
+  // Requests might come in for channels which are not yet registered.
+  // They will timeout after `timeoutDelay`.
+  private pendingRequests = new Map<string, PendingRequest[]>();
+  
+  constructor(private protocol: IMessagePassingProtocol, private ctx: TContext, private logger: IIPCLogger | null = null, private timeoutDelay: number = 1000) {
+  this.protocolListener = this.protocol.onMessage(msg => this.onRawMessage(msg));
+  this.sendResponse({ type: ResponseType.Initialize });
+  }
+  
+  registerChannel(channelName: string, channel: IServerChannel<TContext>): void {
+  this.channels.set(channelName, channel);
+  
+  // https://github.com/microsoft/vscode/issues/72531
+  setTimeout(() => this.flushPendingRequests(channelName), 0);
+  }
+  
+  private sendResponse(response: IRawResponse): void {
+  switch (response.type) {
+  	case ResponseType.Initialize: {
+  		const msgLength = this.send([response.type]);
+  		this.logger?.logOutgoing(msgLength, 0, RequestInitiator.OtherSide, responseTypeToStr(response.type));
+  		return;
+  	}
+  
+  	case ResponseType.PromiseSuccess:
+  	case ResponseType.PromiseError:
+  	case ResponseType.EventFire:
+  	case ResponseType.PromiseErrorObj: {
+  		const msgLength = this.send([response.type, response.id], response.data);
+  		this.logger?.logOutgoing(msgLength, response.id, RequestInitiator.OtherSide, responseTypeToStr(response.type), response.data);
+  		return;
+  	}
+  }
+  }
+  
+  private send(header: any, body: any = undefined): number {
+  const writer = new BufferWriter();
+  serialize(writer, header);
+  serialize(writer, body);
+  return this.sendBuffer(writer.buffer);
+  }
+  
+  private sendBuffer(message: VSBuffer): number {
+  try {
+  	this.protocol.send(message);
+  	return message.byteLength;
+  } catch (err) {
+  	// noop
+  	return 0;
+  }
+  }
+  
+  private onRawMessage(message: VSBuffer): void {
+  const reader = new BufferReader(message);
+  const header = deserialize(reader);
+  const body = deserialize(reader);
+  const type = header[0] as RequestType;
+  
+  switch (type) {
+  	case RequestType.Promise:
+  		this.logger?.logIncoming(message.byteLength, header[1], RequestInitiator.OtherSide, `${requestTypeToStr(type)}: ${header[2]}.${header[3]}`, body);
+  		return this.onPromise({ type, id: header[1], channelName: header[2], name: header[3], arg: body });
+  	case RequestType.EventListen:
+  		this.logger?.logIncoming(message.byteLength, header[1], RequestInitiator.OtherSide, `${requestTypeToStr(type)}: ${header[2]}.${header[3]}`, body);
+  		return this.onEventListen({ type, id: header[1], channelName: header[2], name: header[3], arg: body });
+  	case RequestType.PromiseCancel:
+  		this.logger?.logIncoming(message.byteLength, header[1], RequestInitiator.OtherSide, `${requestTypeToStr(type)}`);
+  		return this.disposeActiveRequest({ type, id: header[1] });
+  	case RequestType.EventDispose:
+  		this.logger?.logIncoming(message.byteLength, header[1], RequestInitiator.OtherSide, `${requestTypeToStr(type)}`);
+  		return this.disposeActiveRequest({ type, id: header[1] });
+  }
+  }
+  
+  private onPromise(request: IRawPromiseRequest): void {
+  const channel = this.channels.get(request.channelName);
+  
+  if (!channel) {
+  	this.collectPendingRequest(request);
+  	return;
+  }
+  
+  const cancellationTokenSource = new CancellationTokenSource();
+  let promise: Promise<any>;
+  
+  try {
+  	promise = channel.call(this.ctx, request.name, request.arg, cancellationTokenSource.token);
+  } catch (err) {
+  	promise = Promise.reject(err);
+  }
+  
+  const id = request.id;
+  
+  promise.then(data => {
+  	this.sendResponse(<IRawResponse>{ id, data, type: ResponseType.PromiseSuccess });
+  }, err => {
+  	if (err instanceof Error) {
+  		this.sendResponse(<IRawResponse>{
+  			id, data: {
+  				message: err.message,
+  				name: err.name,
+  				stack: err.stack ? (err.stack.split ? err.stack.split('\n') : err.stack) : undefined
+  			}, type: ResponseType.PromiseError
+  		});
+  	} else {
+  		this.sendResponse(<IRawResponse>{ id, data: err, type: ResponseType.PromiseErrorObj });
+  	}
+  }).finally(() => {
+  	disposable.dispose();
+  	this.activeRequests.delete(request.id);
+  });
+  
+  const disposable = toDisposable(() => cancellationTokenSource.cancel());
+  this.activeRequests.set(request.id, disposable);
+  }
+  
+  private onEventListen(request: IRawEventListenRequest): void {
+  const channel = this.channels.get(request.channelName);
+  
+  if (!channel) {
+  	this.collectPendingRequest(request);
+  	return;
+  }
+  
+  const id = request.id;
+  const event = channel.listen(this.ctx, request.name, request.arg);
+  const disposable = event(data => this.sendResponse(<IRawResponse>{ id, data, type: ResponseType.EventFire }));
+  
+  this.activeRequests.set(request.id, disposable);
+  }
+  
+  private disposeActiveRequest(request: IRawRequest): void {
+  const disposable = this.activeRequests.get(request.id);
+  
+  if (disposable) {
+  	disposable.dispose();
+  	this.activeRequests.delete(request.id);
+  }
+  }
+  
+  private collectPendingRequest(request: IRawPromiseRequest | IRawEventListenRequest): void {
+  let pendingRequests = this.pendingRequests.get(request.channelName);
+  
+  if (!pendingRequests) {
+  	pendingRequests = [];
+  	this.pendingRequests.set(request.channelName, pendingRequests);
+  }
+  
+  const timer = setTimeout(() => {
+  	console.error(`Unknown channel: ${request.channelName}`);
+  
+  	if (request.type === RequestType.Promise) {
+  		this.sendResponse(<IRawResponse>{
+  			id: request.id,
+  			data: { name: 'Unknown channel', message: `Channel name '${request.channelName}' timed out after ${this.timeoutDelay}ms`, stack: undefined },
+  			type: ResponseType.PromiseError
+  		});
+  	}
+  }, this.timeoutDelay);
+  
+  pendingRequests.push({ request, timeoutTimer: timer });
+  }
+  
+  private flushPendingRequests(channelName: string): void {
+  const requests = this.pendingRequests.get(channelName);
+  
+  if (requests) {
+  	for (const request of requests) {
+  		clearTimeout(request.timeoutTimer);
+  
+  		switch (request.request.type) {
+  			case RequestType.Promise: this.onPromise(request.request); break;
+  			case RequestType.EventListen: this.onEventListen(request.request); break;
+  		}
+  	}
+  
+  	this.pendingRequests.delete(channelName);
+  }
+  }
+  
+  public dispose(): void {
+  if (this.protocolListener) {
+  	this.protocolListener.dispose();
+  	this.protocolListener = null;
+  }
+  dispose(this.activeRequests.values());
+  this.activeRequests.clear();
+  }
+  }
+  ```
+	- 上述也是一个比较通用的ChannelServer的实现。可以看到了ChannelServer实现了IChannelServer接口，也就是实现了registerChannel这个方法。这个方法比较简单，也就是向ChannelServer内的channels Map注册对应的ServerChannel，也就是处理频道。对过来的消息，也会根据不同的标识进行处理。
+	- 在构造函数中，也可以看到和Client一样的行为，那就是对信道进行onMessage的监听。
+	- 除此之外，还需要向Client发送一个初始化信息。
