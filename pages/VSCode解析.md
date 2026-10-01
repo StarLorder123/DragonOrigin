@@ -3244,3 +3244,231 @@
 	- 上述也是一个比较通用的ChannelServer的实现。可以看到了ChannelServer实现了IChannelServer接口，也就是实现了registerChannel这个方法。这个方法比较简单，也就是向ChannelServer内的channels Map注册对应的ServerChannel，也就是处理频道。对过来的消息，也会根据不同的标识进行处理。
 	- 在构造函数中，也可以看到和Client一样的行为，那就是对信道进行onMessage的监听。
 	- 除此之外，还需要向Client发送一个初始化信息。
+-
+- 这时候就会有一个新的概念，那就是IPCClient（IPC Client）。这里和网上有一些资料描述的不一样，那就是一对IPC Client就可以具有一对一的通信，而不是非要一个Client对应一个Server。后者的说法很容易造成误解。
+  
+  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1709351503663-b4a1979e-7dd3-414c-b301-32b9c3924b07.png)
+- IPC Client的源码也很简单，就是包裹了一个ChannelServer和一个ChannelClient。
+  
+  ```
+  export class IPCClient<TContext = string> implements IChannelClient, IChannelServer<TContext>, IDisposable {
+  
+  private channelClient: ChannelClient;
+  private channelServer: ChannelServer<TContext>;
+  
+  constructor(protocol: IMessagePassingProtocol, ctx: TContext, ipcLogger: IIPCLogger | null = null) {
+  const writer = new BufferWriter();
+  serialize(writer, ctx);
+  protocol.send(writer.buffer);
+  
+  this.channelClient = new ChannelClient(protocol, ipcLogger);
+  this.channelServer = new ChannelServer(protocol, ctx, ipcLogger);
+  }
+  
+  getChannel<T extends IChannel>(channelName: string): T {
+  return this.channelClient.getChannel(channelName) as T;
+  }
+  
+  registerChannel(channelName: string, channel: IServerChannel<TContext>): void {
+  this.channelServer.registerChannel(channelName, channel);
+  }
+  
+  dispose(): void {
+  this.channelClient.dispose();
+  this.channelServer.dispose();
+  }
+  }
+  ```
+- 那么此时问题又来了，在Electron框架下，主进程只有一个，而且VSCode还构建了全局唯一的一个共享进程，这就需要一个一对多的通信。这里就需要引入两个概念，一个Connection，另外一个IPCServer（IPC Server）。主进程和共享进程可能会同时服务多个渲染进程，此时就需要一个对象在主进程端，对不同的渲染进程连接的IPC Client进行管理。
+- Connection本质上就是一个IPCClient和一个唯一标识ctx组成的，可以看成是一个IPCClient。而IPCServer就是对多个Connection进行管理和通信的对象。
+- 先看一下Connection的源码：
+- ```
+  export class IPCServer<TContext = string> implements IChannelServer<TContext>, IRoutingChannelClient<TContext>, IConnectionHub<TContext>, IDisposable {
+  
+  	private channels = new Map<string, IServerChannel<TContext>>();
+  	private _connections = new Set<Connection<TContext>>();
+  
+  	private readonly _onDidAddConnection = new Emitter<Connection<TContext>>();
+  	readonly onDidAddConnection: Event<Connection<TContext>> = this._onDidAddConnection.event;
+  
+  	private readonly _onDidRemoveConnection = new Emitter<Connection<TContext>>();
+  	readonly onDidRemoveConnection: Event<Connection<TContext>> = this._onDidRemoveConnection.event;
+  
+  	private readonly disposables = new DisposableStore();
+  
+  	get connections(): Connection<TContext>[] {
+  		const result: Connection<TContext>[] = [];
+  		this._connections.forEach(ctx => result.push(ctx));
+  		return result;
+  	}
+  
+  	constructor(onDidClientConnect: Event<ClientConnectionEvent>) {
+  		// 当客户端连接时触发。在连接发生时，会执行提供的回调函数。
+  		this.disposables.add(onDidClientConnect(({ protocol, onDidClientDisconnect }) => {
+  			const onFirstMessage = Event.once(protocol.onMessage);
+  
+  			this.disposables.add(onFirstMessage(msg => {
+  				const reader = new BufferReader(msg);
+  				const ctx = deserialize(reader) as TContext;
+  
+  				const channelServer = new ChannelServer(protocol, ctx);
+  				const channelClient = new ChannelClient(protocol);
+  
+  				this.channels.forEach((channel, name) => channelServer.registerChannel(name, channel));
+  
+  				const connection: Connection<TContext> = { channelServer, channelClient, ctx };
+  				this._connections.add(connection);
+  				this._onDidAddConnection.fire(connection);
+  
+  				this.disposables.add(onDidClientDisconnect(() => {
+  					channelServer.dispose();
+  					channelClient.dispose();
+  					this._connections.delete(connection);
+  					this._onDidRemoveConnection.fire(connection);
+  				}));
+  			}));
+  		}));
+  	}
+  
+  	/**
+  	 * Get a channel from a remote client. When passed a router,
+  	 * one can specify which client it wants to call and listen to/from.
+  	 * Otherwise, when calling without a router, a random client will
+  	 * be selected and when listening without a router, every client
+  	 * will be listened to.
+  	 */
+  	getChannel<T extends IChannel>(channelName: string, router: IClientRouter<TContext>): T;
+  	getChannel<T extends IChannel>(channelName: string, clientFilter: (client: Client<TContext>) => boolean): T;
+  	getChannel<T extends IChannel>(channelName: string, routerOrClientFilter: IClientRouter<TContext> | ((client: Client<TContext>) => boolean)): T {
+  		const that = this;
+  
+  		return {
+  			call(command: string, arg?: any, cancellationToken?: CancellationToken): Promise<T> {
+  				let connectionPromise: Promise<Client<TContext>>;
+  
+  				if (isFunction(routerOrClientFilter)) {
+  					// when no router is provided, we go random client picking
+  					const connection = getRandomElement(that.connections.filter(routerOrClientFilter));
+  
+  					connectionPromise = connection
+  						// if we found a client, let's call on it
+  						? Promise.resolve(connection)
+  						// else, let's wait for a client to come along
+  						: Event.toPromise(Event.filter(that.onDidAddConnection, routerOrClientFilter));
+  				} else {
+  					connectionPromise = routerOrClientFilter.routeCall(that, command, arg);
+  				}
+  
+  				const channelPromise = connectionPromise
+  					.then(connection => (connection as Connection<TContext>).channelClient.getChannel(channelName));
+  
+  				return getDelayedChannel(channelPromise)
+  					.call(command, arg, cancellationToken);
+  			},
+  			listen(event: string, arg: any): Event<T> {
+  				if (isFunction(routerOrClientFilter)) {
+  					return that.getMulticastEvent(channelName, routerOrClientFilter, event, arg);
+  				}
+  
+  				const channelPromise = routerOrClientFilter.routeEvent(that, event, arg)
+  					.then(connection => (connection as Connection<TContext>).channelClient.getChannel(channelName));
+  
+  				return getDelayedChannel(channelPromise)
+  					.listen(event, arg);
+  			}
+  		} as T;
+  	}
+  
+  	private getMulticastEvent<T extends IChannel>(channelName: string, clientFilter: (client: Client<TContext>) => boolean, eventName: string, arg: any): Event<T> {
+  		const that = this;
+  		let disposables: DisposableStore | undefined;
+  
+  		// Create an emitter which hooks up to all clients
+  		// as soon as first listener is added. It also
+  		// disconnects from all clients as soon as the last listener
+  		// is removed.
+  		const emitter = new Emitter<T>({
+  			onWillAddFirstListener: () => {
+  				disposables = new DisposableStore();
+  
+  				// The event multiplexer is useful since the active
+  				// client list is dynamic. We need to hook up and disconnection
+  				// to/from clients as they come and go.
+  				const eventMultiplexer = new EventMultiplexer<T>();
+  				const map = new Map<Connection<TContext>, IDisposable>();
+  
+  				const onDidAddConnection = (connection: Connection<TContext>) => {
+  					const channel = connection.channelClient.getChannel(channelName);
+  					const event = channel.listen<T>(eventName, arg);
+  					const disposable = eventMultiplexer.add(event);
+  
+  					map.set(connection, disposable);
+  				};
+  
+  				const onDidRemoveConnection = (connection: Connection<TContext>) => {
+  					const disposable = map.get(connection);
+  
+  					if (!disposable) {
+  						return;
+  					}
+  
+  					disposable.dispose();
+  					map.delete(connection);
+  				};
+  
+  				that.connections.filter(clientFilter).forEach(onDidAddConnection);
+  				Event.filter(that.onDidAddConnection, clientFilter)(onDidAddConnection, undefined, disposables);
+  				that.onDidRemoveConnection(onDidRemoveConnection, undefined, disposables);
+  				eventMultiplexer.event(emitter.fire, emitter, disposables);
+  
+  				disposables.add(eventMultiplexer);
+  			},
+  			onDidRemoveLastListener: () => {
+  				disposables?.dispose();
+  				disposables = undefined;
+  			}
+  		});
+  
+  		return emitter.event;
+  	}
+  
+  	registerChannel(channelName: string, channel: IServerChannel<TContext>): void {
+  		this.channels.set(channelName, channel);
+  
+  		for (const connection of this._connections) {
+  			connection.channelServer.registerChannel(channelName, channel);
+  		}
+  	}
+  
+  	dispose(): void {
+  		this.disposables.dispose();
+  
+  		for (const connection of this._connections) {
+  			connection.channelClient.dispose();
+  			connection.channelServer.dispose();
+  		}
+  
+  		this._connections.clear();
+  		this.channels.clear();
+  		this._onDidAddConnection.dispose();
+  		this._onDidRemoveConnection.dispose();
+  	}
+  }
+  ```
+	- 可以看到源码中IPCServer不仅对Connection进行了管理，还有单个IPC Client的功能，具体原因是因为主进程还需要跟共享进程进行通信，所以这里也有一部分点对点的通信，因此IPC Server不仅有管理IPCClient的功能，还有单个IPCClient的具体功能。
+- ### 5.5.5.  VSCode进程通信构建流程
+- 主进程启动，构建一个IPCServer，
+- 主进程-共享进程
+	- 主进程 fork 共享进程，两者构建基于Electron IPC的通信，主进程侧通过闭包的形式将连接共享进程的方式暴露。
+	- 共享进程创建一个IPC Server，用于管理渲染进程Client
+- 主进程 - 渲染进程
+	- 主进程 fork 渲染进程，两者构建Electron IPC通信，同时构建渲染进程侧的IPCClient。主进程的IPCServer将其纳入管理。
+	- 渲染进程生成RequestChannel和ResponseChannel，向主进程请求连接共享进程。
+	- 主进程在收到请求之后，通过上述提及的通信桥通信机制，构建渲染进程和共享进程的通信。
+	- 共享进程将上述构建的通信通道纳入到Client管理中。
+	- 渲染进程生成ResponseChannel，向主进程请求创建不同的工具进程。
+	- 主进程在收到请求之后，通过上述提及的通信桥通信机制，fork新的子进程，并将通信通道所有权移交给渲染进程。
+- 综上所属：IPCServer只存在于主进程和共享进程中，渲染进程中没有IPCServer，其与不同工具进程间的通信都是一对一式的，并且包装成了不同的Service提供服务。
+- ### 5.5.6.  资料总结
+- [https://zhuanlan.zhihu.com/p/360106947](https://zhuanlan.zhihu.com/p/360106947)
+-
