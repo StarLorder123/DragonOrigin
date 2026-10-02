@@ -3688,3 +3688,355 @@
 - ### 5.6.2.  OpenSSH 插件源码
   
   [https://github.com/jeanp413/open-remote-ssh](https://github.com/jeanp413/open-remote-ssh)
+- # 6.  VSCode架构分析
+- VSCode源码地址：[https://github.com/microsoft/vscode](https://github.com/microsoft/vscode)
+- VSCode文档地址：[https://code.visualstudio.com/docs](https://code.visualstudio.com/docs)
+- ## 6.1.  VSCode界面设计
+- ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1695539033527-fb1e9e29-faec-4b7f-8751-cd13a90c2f2f.png)
+- ## 6.2.  VSCode软件产品形态
+- VSCode一共有三种形态：
+	- 客户端形态：windows、linux、macos三种主流操作系统的客户端
+	- server形态：用于构建vscode的网页版，另外ssh版本也需要在远端建立起一个server版的vscode
+	- cli形态：命令行形态
+- 下图就是官方提供了一个关于SSH如何链接到远端进行远程开发的示意图。
+- 这也就是实现了渲染和工作空间分离的好处。也可以看出来VSCode这个产品设计的精巧之处。
+  
+  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1719071869495-d0ec4a87-d3ff-4455-8045-1b8072c8a074.png)
+- ## 6.3.  启动流程（TLDR）
+- ### 6.3.1.  客户端形态
+- VSCode是基于typescript语言开发的。因此，在桌面的状态下，启动会通过node out/main.js来启动整个VSCode的应用程序。而通过对源码中的tsconfig.json来看，out/main.js这个文件是由src/main.js而来的。因此可以去看这个文件。
+- 在这个文件中，可以看到这样一段代码
+- ```
+  // Load our code once ready
+  app.once('ready', function () {
+    if (args['trace']) {
+      const contentTracing = require('electron').contentTracing;
+  
+      const traceOptions = {
+        categoryFilter: args['trace-category-filter'] || '*',
+        traceOptions: args['trace-options'] || 'record-until-full,enable-sampling'
+      };
+  
+      contentTracing.startRecording(traceOptions).finally(() => onReady());
+    } else {
+      onReady();
+    }
+  });
+  
+  /**
+   * Main startup routine
+   *
+   * @param {string | undefined} codeCachePath
+   * @param {NLSConfiguration} nlsConfig
+   */
+  function startup(codeCachePath, nlsConfig) {
+    nlsConfig._languagePackSupport = true;
+  
+    process.env['VSCODE_NLS_CONFIG'] = JSON.stringify(nlsConfig);
+    process.env['VSCODE_CODE_CACHE_PATH'] = codeCachePath || '';
+  
+    // Load main in AMD
+    perf.mark('code/willLoadMainBundle');
+    // 真正的启动就是在这里，可以看到是通过require的方式引入了amd机制加载依赖，然后启动vs/code/electron-main/main，也就是说vs/code/electron-main/main文件是整个vscode启动时的第一个源代码入口
+    require('./bootstrap-amd').load('vs/code/electron-main/main', () => {
+      perf.mark('code/didLoadMainBundle');
+    });
+  }
+  
+  async function onReady() {
+    perf.mark('code/mainAppReady');
+  
+    try {
+      const [, nlsConfig] = await Promise.all([mkdirpIgnoreError(codeCachePath), resolveNlsConfiguration()]);
+  
+      startup(codeCachePath, nlsConfig);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+  ```
+	- app是electron的api。app.once('ready',...)是指的，在应用程序ready时，就执行以下的方法函数。
+	- 而这个方法就是整个vscode应用程序的入口。可以看到，入口是通过amd引入bootstrap-amd这个模块去加载vs/code/electron-main/main文件来启动的。
+- 接下来解析vs/code/electron-main/main文件
+	- 整个文件只会执行最后两行，因为根据ts的语法，前面大部分都是在描述CodeMain这个类。
+	  
+	  ```
+	  // Main Startup
+	  const code = new CodeMain();
+	  code.main();
+	  ```
+	- 可以看到这个文件就执行了一个main函数。接下来看一下main函数里面。
+	  
+	  ```
+	  main(): void {
+	  try {
+	  this.startup();
+	  } catch (error) {
+	  console.error(error.message);
+	  app.exit(1);
+	  }
+	  }
+	  ```
+	- main函数也很简单，就是执行了一个startup方法，以及如果出错处理的方法。接下来看一下startup方法。
+	  
+	  ```
+	  private async startup(): Promise<void> {
+	  
+	  // Set the error handler early enough so that we are not getting the
+	  // default electron error dialog popping up
+	  setUnexpectedErrorHandler(err => console.error(err));
+	  
+	  // Create services
+	  const [instantiationService, instanceEnvironment, environmentMainService, configurationService, stateMainService, bufferLogService, productService, userDataProfilesMainService] = this.createServices();
+	  
+	  try {
+	  
+	  // Init services
+	  try {
+	  	await this.initServices(environmentMainService, userDataProfilesMainService, configurationService, stateMainService, productService);
+	  } catch (error) {
+	  
+	  	// Show a dialog for errors that can be resolved by the user
+	  	this.handleStartupDataDirError(environmentMainService, productService, error);
+	  
+	  	throw error;
+	  }
+	  
+	  // Startup
+	  await instantiationService.invokeFunction(async accessor => {
+	  	const logService = accessor.get(ILogService);
+	  	const lifecycleMainService = accessor.get(ILifecycleMainService);
+	  	const fileService = accessor.get(IFileService);
+	  	const loggerService = accessor.get(ILoggerService);
+	  
+	  	// Create the main IPC server by trying to be the server
+	  	// If this throws an error it means we are not the first
+	  	// instance of VS Code running and so we would quit.
+	  	const mainProcessNodeIpcServer = await this.claimInstance(logService, environmentMainService, lifecycleMainService, instantiationService, productService, true);
+	  
+	  	// Write a lockfile to indicate an instance is running
+	  	// (https://github.com/microsoft/vscode/issues/127861#issuecomment-877417451)
+	  	FSPromises.writeFile(environmentMainService.mainLockfile, String(process.pid)).catch(err => {
+	  		logService.warn(`app#startup(): Error writing main lockfile: ${err.stack}`);
+	  	});
+	  
+	  	// Delay creation of spdlog for perf reasons (https://github.com/microsoft/vscode/issues/72906)
+	  	bufferLogService.logger = loggerService.createLogger('main', { name: localize('mainLog', "Main") });
+	  
+	  	// Lifecycle
+	  	Event.once(lifecycleMainService.onWillShutdown)(evt => {
+	  		fileService.dispose();
+	  		configurationService.dispose();
+	  		evt.join('instanceLockfile', FSPromises.unlink(environmentMainService.mainLockfile).catch(() => { /* ignored */ }));
+	  	});
+	       // 启动vscode应用程序
+	  	return instantiationService.createInstance(CodeApplication, mainProcessNodeIpcServer, instanceEnvironment).startup();
+	  });
+	  } catch (error) {
+	  instantiationService.invokeFunction(this.quit, error);
+	  }
+	  }
+	  ```
+	- 可以看到startup方法就复杂了起来，里面大概可以分为这么几步：
+		- 1.  设置未处理错误的处理器
+		- 2.  初始化基本的Service，包含了之前提及的IoC服务、环境服务、配置服务等等
+		- 3.  初始化各类基本的Service
+		- 4. 在最后，启动CodeApplication这个类，并执行CodeApplication.startup这个方法。这里是vscode应用程序正式启动的起点。
+- 接下来，就看vs/code/electron-main/app这个文件，上面提及的CodeApplication.startup方法就在这里面
+  
+  ```
+  async startup(): Promise<void> {
+  this.logService.debug('Starting VS Code');
+  this.logService.debug(`from: ${this.environmentMainService.appRoot}`);
+  this.logService.debug('args:', this.environmentMainService.args);
+  
+  // Make sure we associate the program with the app user model id
+  // This will help Windows to associate the running program with
+  // any shortcut that is pinned to the taskbar and prevent showing
+  // two icons in the taskbar for the same app.
+  const win32AppUserModelId = this.productService.win32AppUserModelId;
+  if (isWindows && win32AppUserModelId) {
+  	app.setAppUserModelId(win32AppUserModelId);
+  }
+  
+  // Fix native tabs on macOS 10.13
+  // macOS enables a compatibility patch for any bundle ID beginning with
+  // "com.microsoft.", which breaks native tabs for VS Code when using this
+  // identifier (from the official build).
+  // Explicitly opt out of the patch here before creating any windows.
+  // See: https://github.com/microsoft/vscode/issues/35361#issuecomment-399794085
+  try {
+  	if (isMacintosh && this.configurationService.getValue('window.nativeTabs') === true && !systemPreferences.getUserDefault('NSUseImprovedLayoutPass', 'boolean')) {
+  		systemPreferences.setUserDefault('NSUseImprovedLayoutPass', 'boolean', true as any);
+  	}
+  } catch (error) {
+  	this.logService.error(error);
+  }
+  
+  // Main process server (electron IPC based)
+  const mainProcessElectronServer = new ElectronIPCServer();
+  this.lifecycleMainService.onWillShutdown(e => {
+  	if (e.reason === ShutdownReason.KILL) {
+  		// When we go down abnormally, make sure to free up
+  		// any IPC we accept from other windows to reduce
+  		// the chance of doing work after we go down. Kill
+  		// is special in that it does not orderly shutdown
+  		// windows.
+  		mainProcessElectronServer.dispose();
+  	}
+  });
+  
+  // Resolve unique machine ID
+  this.logService.trace('Resolving machine identifier...');
+  const [machineId, sqmId] = await Promise.all([
+  	resolveMachineId(this.stateService, this.logService),
+  	resolveSqmId(this.stateService, this.logService)
+  ]);
+  this.logService.trace(`Resolved machine identifier: ${machineId}`);
+  
+  // Shared process
+    // 共享进程启动
+  const { sharedProcessReady, sharedProcessClient } = this.setupSharedProcess(machineId, sqmId);
+  
+  // Services
+  const appInstantiationService = await this.initServices(machineId, sqmId, sharedProcessReady);
+  
+  // Auth Handler
+  this._register(appInstantiationService.createInstance(ProxyAuthHandler));
+  
+  // Transient profiles handler
+  this._register(appInstantiationService.createInstance(UserDataProfilesHandler));
+  
+  // Init Channels
+  appInstantiationService.invokeFunction(accessor => this.initChannels(accessor, mainProcessElectronServer, sharedProcessClient));
+  
+  // Setup Protocol URL Handlers
+  const initialProtocolUrls = await appInstantiationService.invokeFunction(accessor => this.setupProtocolUrlHandlers(accessor, mainProcessElectronServer));
+  
+  // Setup vscode-remote-resource protocol handler.
+  this.setupManagedRemoteResourceUrlHandler(mainProcessElectronServer);
+  
+  // Signal phase: ready - before opening first window
+  this.lifecycleMainService.phase = LifecycleMainPhase.Ready;
+  
+  // Open Windows
+    // 启动窗口
+  await appInstantiationService.invokeFunction(accessor => this.openFirstWindow(accessor, initialProtocolUrls));
+  
+  // Signal phase: after window open
+  this.lifecycleMainService.phase = LifecycleMainPhase.AfterWindowOpen;
+  
+  // Post Open Windows Tasks
+  this.afterWindowOpen();
+  
+  // Set lifecycle phase to `Eventually` after a short delay and when idle (min 2.5sec, max 5sec)
+  const eventuallyPhaseScheduler = this._register(new RunOnceScheduler(() => {
+  	this._register(runWhenGlobalIdle(() => this.lifecycleMainService.phase = LifecycleMainPhase.Eventually, 2500));
+  }, 2500));
+  eventuallyPhaseScheduler.schedule();
+  }
+  ```
+	- 这个函数里面就包含了启动vscode应用程序的主干流程。
+	- 其中，可以看到，vscode启动了一个shared process。后面就称之为共享进程。这个共享进程是全局唯一的，是作为主进程的辅助，为渲染进程提供一些共享的空间和服务。
+	- 在启动了共享进程之后，vscode后面又开始初始化渲染进程。这个渲染进程就是vscode的窗口。
+- 进入到openFirstWindow方法可以看到频繁使用了windowsMainService.open这个方法，这个方法就是打开窗口的方法。这个open方法是在src\vs\platform\windows\electron-main\windowsMainService.ts这个文件中实现的。在这个方法中翻找，可以找到这样的一行。
+  
+  ```
+  // Open based on config
+  const { windows: usedWindows, filesOpenedInWindow } = await this.doOpen(openConfig, workspacesToOpen, foldersToOpen, emptyWindowsWithBackupsToRestore, emptyToOpen, filesToOpen, foldersToAdd);
+  ```
+- 这句话的意思就是根据config来打开窗口。然后我们进入到doOpen这个方法中进行翻找。这方法里面就是打开窗口的实际操作方法。通过查看这个方法，我们可以找到一个方法openInBrowserWindow，这个方法是打开窗口基础的方法，我们可以进入到这个方法中看vscode窗口是怎么打开的。这个方法的结束又有一个doOpenInBrowserWindow方法，看来只有这个方法才是真正打开窗口的地方，之前都是在做准备工作。进入到doOpenInBrowserWindow这个方法中，看到最后。看到了以下的代码
+  
+  ```
+  // Load it
+  window.load(configuration);
+  ```
+- 上面这段代码就是打开窗口的最核心的方法。
+- 其实通过仔细阅读openInBrowserWindow这个方法，我们可以看到vscode窗口的创建分为两步。首先是在src\vs\platform\windows\electron-main\windowsMainService.ts中的第1473行上下，首先执行了一个创建空窗口的代码。在创建CodeWindow这个对象的过程中，会调用electron的创建窗口的函数。
+  
+  ```
+  // Create the window
+  	mark('code/willCreateCodeWindow');
+  	// 创建一个空的窗口
+  	const createdWindow = window = this.instantiationService.createInstance(CodeWindow, {
+  		state,
+  		extensionDevelopmentPath: configuration.extensionDevelopmentPath,
+  		isExtensionTestHost: !!configuration.extensionTestsPath
+  	});
+  	mark('code/didCreateCodeWindow');
+  ```
+- 然后再上述的load方法中对创建的新窗口内进行具体的元素填充。
+  
+  ```
+  load(configuration: INativeWindowConfiguration, options: ILoadOptions = Object.create(null)): void {
+  this.logService.trace(`window#load: attempt to load window (id: ${this._id})`);
+  
+  // Clear Document Edited if needed
+  if (this.isDocumentEdited()) {
+  	if (!options.isReload || !this.backupMainService.isHotExitEnabled()) {
+  		this.setDocumentEdited(false);
+  	}
+  }
+  
+  // Clear Title and Filename if needed
+  if (!options.isReload) {
+  	if (this.getRepresentedFilename()) {
+  		this.setRepresentedFilename('');
+  	}
+  
+  	this._win.setTitle(this.productService.nameLong);
+  }
+  
+  // Update configuration values based on our window context
+  // and set it into the config object URL for usage.
+  this.updateConfiguration(configuration, options);
+  
+  // If this is the first time the window is loaded, we associate the paths
+  // directly with the window because we assume the loading will just work
+  if (this.readyState === ReadyState.NONE) {
+  	this._config = configuration;
+  }
+  
+  // Otherwise, the window is currently showing a folder and if there is an
+  // unload handler preventing the load, we cannot just associate the paths
+  // because the loading might be vetoed. Instead we associate it later when
+  // the window load event has fired.
+  else {
+  	this.pendingLoadConfig = configuration;
+  }
+  
+  // Indicate we are navigting now
+  this.readyState = ReadyState.NAVIGATING;
+  
+  // Load URL
+  // 加载空窗口内的具体元素，即渲染
+  this._win.loadURL(FileAccess.asBrowserUri(`vs/code/electron-sandbox/workbench/workbench${this.environmentMainService.isBuilt ? '' : '-dev'}.html`).toString(true));
+  
+  // Remember that we did load
+  const wasLoaded = this.wasLoaded;
+  this.wasLoaded = true;
+  
+  // Make window visible if it did not open in N seconds because this indicates an error
+  // Only do this when running out of sources and not when running tests
+  if (!this.environmentMainService.isBuilt && !this.environmentMainService.extensionTestsLocationURI) {
+  	this._register(new RunOnceScheduler(() => {
+  		if (this._win && !this._win.isVisible() && !this._win.isMinimized()) {
+  			this._win.show();
+  			this.focus({ force: true });
+  			this._win.webContents.openDevTools();
+  		}
+  	}, 10000)).schedule();
+  }
+  
+  // Event
+  this._onWillLoad.fire({ workspace: configuration.workspace, reason: options.isReload ? LoadReason.RELOAD : wasLoaded ? LoadReason.LOAD : LoadReason.INITIAL });
+  }
+  ```
+- 在上述的load这个方法内，可以看到有一行，就是使用文件的服务，进行加载一个html。这个html就在vs/code/electron-sandbox/workbench文件夹下。看到这个html中，有一行：
+  
+  ```
+  <script src="workbench.js"></script>
+  ```
+- 看到这一行就意味这，在这个空窗口渲染的过程中，会去加载workbench.js文件。而这个文件就是渲染进程内主要执行的代码文件了。
+- 在workbench.js这个文件中，最最最重要的，就是提示我们，vscode的渲染进程使用bootstrap-window.js这个模块，加载了'vs/workbench/workbench.desktop.main','vs/nls!vs/workbench/workbench.desktop.main','vs/css!vs/workbench/workbench.desktop.main'这三个文件，其中workbench.desktop.main就是定义了这个窗口内各类元素行为的代码文件，其余两个是国际化和渲染相关的css文件。至此为止，vscode比较重要的加载顺序和大致框架就结束了，接下来就是各个进程加载的细节了。
+-
