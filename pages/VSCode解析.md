@@ -3244,7 +3244,9 @@
 	- 上述也是一个比较通用的ChannelServer的实现。可以看到了ChannelServer实现了IChannelServer接口，也就是实现了registerChannel这个方法。这个方法比较简单，也就是向ChannelServer内的channels Map注册对应的ServerChannel，也就是处理频道。对过来的消息，也会根据不同的标识进行处理。
 	- 在构造函数中，也可以看到和Client一样的行为，那就是对信道进行onMessage的监听。
 	- 除此之外，还需要向Client发送一个初始化信息。
--
+- ### 5.5.4.  一对一通信和一对多通信
+- 在上述描述的基础上，我们可以看到了一个比较完整的单向通信方式，也就是Caller-Service机制。那么如何实现一对一的双向通信呢？
+- 很简单，让一个对象同时具有ChannelServer和ChannelClient就可以了。
 - 这时候就会有一个新的概念，那就是IPCClient（IPC Client）。这里和网上有一些资料描述的不一样，那就是一对IPC Client就可以具有一对一的通信，而不是非要一个Client对应一个Server。后者的说法很容易造成误解。
   
   ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1709351503663-b4a1979e-7dd3-414c-b301-32b9c3924b07.png)
@@ -3471,4 +3473,218 @@
 - 综上所属：IPCServer只存在于主进程和共享进程中，渲染进程中没有IPCServer，其与不同工具进程间的通信都是一对一式的，并且包装成了不同的Service提供服务。
 - ### 5.5.6.  资料总结
 - [https://zhuanlan.zhihu.com/p/360106947](https://zhuanlan.zhihu.com/p/360106947)
--
+- ## 5.6.  Remote SSH解析
+- ### 5.6.1.  Remote SSH远程建链流程
+- 1. 通过SSH远程到服务器上下载Code-Server
+	- 根据host、port、username、password或者可信的public-key通过ssh远程到服务器下载code-server
+	- 解压、启动
+- ```
+  # Server installation script
+  
+  TMP_DIR="\${XDG_RUNTIME_DIR:-"/tmp"}"
+  
+  DISTRO_VERSION="${version}"
+  DISTRO_COMMIT="${commit}"
+  DISTRO_QUALITY="${quality}"
+  DISTRO_VSCODIUM_RELEASE="${release ?? ''}"
+  
+  SERVER_APP_NAME="${serverApplicationName}"
+  SERVER_INITIAL_EXTENSIONS="${extensions}"
+  SERVER_LISTEN_FLAG="${useSocketPath ? `--socket-path="$TMP_DIR/vscode-server-sock-${crypto.randomUUID()}"` : '--port=0'}"
+  SERVER_DATA_DIR="$HOME/${serverDataFolderName}"
+  SERVER_DIR="$SERVER_DATA_DIR/bin/$DISTRO_COMMIT"
+  SERVER_SCRIPT="$SERVER_DIR/bin/$SERVER_APP_NAME"
+  SERVER_LOGFILE="$SERVER_DATA_DIR/.$DISTRO_COMMIT.log"
+  SERVER_PIDFILE="$SERVER_DATA_DIR/.$DISTRO_COMMIT.pid"
+  SERVER_TOKENFILE="$SERVER_DATA_DIR/.$DISTRO_COMMIT.token"
+  SERVER_ARCH=
+  SERVER_CONNECTION_TOKEN=
+  SERVER_DOWNLOAD_URL=
+  
+  LISTENING_ON=
+  OS_RELEASE_ID=
+  ARCH=
+  PLATFORM=
+  
+  # Mimic output from logs of remote-ssh extension
+  print_install_results_and_exit() {
+      echo "${id}: start"
+      echo "exitCode==$1=="
+      echo "listeningOn==$LISTENING_ON=="
+      echo "connectionToken==$SERVER_CONNECTION_TOKEN=="
+      echo "logFile==$SERVER_LOGFILE=="
+      echo "osReleaseId==$OS_RELEASE_ID=="
+      echo "arch==$ARCH=="
+      echo "platform==$PLATFORM=="
+      echo "tmpDir==$TMP_DIR=="
+      ${envVariables.map(envVar => `echo "${envVar}==$${envVar}=="`).join('\n')}
+      echo "${id}: end"
+      exit 0
+  }
+  
+  # Check if platform is supported
+  KERNEL="$(uname -s)"
+  case $KERNEL in
+      Darwin)
+          PLATFORM="darwin"
+          ;;
+      Linux)
+          PLATFORM="linux"
+          ;;
+      FreeBSD)
+          PLATFORM="freebsd"
+          ;;
+      DragonFly)
+          PLATFORM="dragonfly"
+          ;;
+      *)
+          echo "Error platform not supported: $KERNEL"
+          print_install_results_and_exit 1
+          ;;
+  esac
+  
+  # Check machine architecture
+  ARCH="$(uname -m)"
+  case $ARCH in
+      x86_64 | amd64)
+          SERVER_ARCH="x64"
+          ;;
+      armv7l | armv8l)
+          SERVER_ARCH="armhf"
+          ;;
+      arm64 | aarch64)
+          SERVER_ARCH="arm64"
+          ;;
+      ppc64le)
+          SERVER_ARCH="ppc64le"
+          ;;
+      *)
+          echo "Error architecture not supported: $ARCH"
+          print_install_results_and_exit 1
+          ;;
+  esac
+  
+  # https://www.freedesktop.org/software/systemd/man/os-release.html
+  OS_RELEASE_ID="$(grep -i '^ID=' /etc/os-release 2>/dev/null | sed 's/^ID=//gi' | sed 's/"//g')"
+  if [[ -z $OS_RELEASE_ID ]]; then
+      OS_RELEASE_ID="$(grep -i '^ID=' /usr/lib/os-release 2>/dev/null | sed 's/^ID=//gi' | sed 's/"//g')"
+      if [[ -z $OS_RELEASE_ID ]]; then
+          OS_RELEASE_ID="unknown"
+      fi
+  fi
+  
+  # Create installation folder
+  if [[ ! -d $SERVER_DIR ]]; then
+      mkdir -p $SERVER_DIR
+      if (( $? > 0 )); then
+          echo "Error creating server install directory"
+          print_install_results_and_exit 1
+      fi
+  fi
+  
+  SERVER_DOWNLOAD_URL="$(echo "${serverDownloadUrlTemplate.replace(/\$\{/g, '\\${')}" | sed "s/\\\${quality}/$DISTRO_QUALITY/g" | sed "s/\\\${version}/$DISTRO_VERSION/g" | sed "s/\\\${commit}/$DISTRO_COMMIT/g" | sed "s/\\\${os}/$PLATFORM/g" | sed "s/\\\${arch}/$SERVER_ARCH/g" | sed "s/\\\${release}/$DISTRO_VSCODIUM_RELEASE/g")"
+  
+  # Check if server script is already installed
+  if [[ ! -f $SERVER_SCRIPT ]]; then
+      if [[ "$PLATFORM" != "darwin" ]] && [[ "$PLATFORM" != "linux" ]]; then
+          echo "Error "$PLATFORM" needs manual installation of remote extension host"
+          print_install_results_and_exit 1
+      fi
+  
+      pushd $SERVER_DIR > /dev/null
+  
+      if [[ ! -z $(which wget) ]]; then
+          wget --tries=3 --timeout=10 --continue --no-verbose -O vscode-server.tar.gz $SERVER_DOWNLOAD_URL
+      elif [[ ! -z $(which curl) ]]; then
+          curl --retry 3 --connect-timeout 10 --location --show-error --silent --output vscode-server.tar.gz $SERVER_DOWNLOAD_URL
+      else
+          echo "Error no tool to download server binary"
+          print_install_results_and_exit 1
+      fi
+  
+      if (( $? > 0 )); then
+          echo "Error downloading server from $SERVER_DOWNLOAD_URL"
+          print_install_results_and_exit 1
+      fi
+  
+      tar -xf vscode-server.tar.gz --strip-components 1
+      if (( $? > 0 )); then
+          echo "Error while extracting server contents"
+          print_install_results_and_exit 1
+      fi
+  
+      if [[ ! -f $SERVER_SCRIPT ]]; then
+          echo "Error server contents are corrupted"
+          print_install_results_and_exit 1
+      fi
+  
+      rm -f vscode-server.tar.gz
+  
+      popd > /dev/null
+  else
+      echo "Server script already installed in $SERVER_SCRIPT"
+  fi
+  
+  # Try to find if server is already running
+  if [[ -f $SERVER_PIDFILE ]]; then
+      SERVER_PID="$(cat $SERVER_PIDFILE)"
+      SERVER_RUNNING_PROCESS="$(ps -o pid,args -p $SERVER_PID | grep $SERVER_SCRIPT)"
+  else
+      SERVER_RUNNING_PROCESS="$(ps -o pid,args -A | grep $SERVER_SCRIPT | grep -v grep)"
+  fi
+  
+  if [[ -z $SERVER_RUNNING_PROCESS ]]; then
+      if [[ -f $SERVER_LOGFILE ]]; then
+          rm $SERVER_LOGFILE
+      fi
+      if [[ -f $SERVER_TOKENFILE ]]; then
+          rm $SERVER_TOKENFILE
+      fi
+  
+      touch $SERVER_TOKENFILE
+      chmod 600 $SERVER_TOKENFILE
+      SERVER_CONNECTION_TOKEN="${crypto.randomUUID()}"
+      echo $SERVER_CONNECTION_TOKEN > $SERVER_TOKENFILE
+  
+      $SERVER_SCRIPT --start-server --host=127.0.0.1 $SERVER_LISTEN_FLAG $SERVER_INITIAL_EXTENSIONS --connection-token-file $SERVER_TOKENFILE --telemetry-level off --enable-remote-auto-shutdown --accept-server-license-terms &> $SERVER_LOGFILE &
+      echo $! > $SERVER_PIDFILE
+  else
+      echo "Server script is already running $SERVER_SCRIPT"
+  fi
+  
+  if [[ -f $SERVER_TOKENFILE ]]; then
+      SERVER_CONNECTION_TOKEN="$(cat $SERVER_TOKENFILE)"
+  else
+      echo "Error server token file not found $SERVER_TOKENFILE"
+      print_install_results_and_exit 1
+  fi
+  
+  if [[ -f $SERVER_LOGFILE ]]; then
+      for i in {1..5}; do
+          LISTENING_ON="$(cat $SERVER_LOGFILE | grep -E 'Extension host agent listening on .+' | sed 's/Extension host agent listening on //')"
+          if [[ -n $LISTENING_ON ]]; then
+              break
+          fi
+          sleep 0.5
+      done
+  
+      if [[ -z $LISTENING_ON ]]; then
+          echo "Error server did not start sucessfully"
+          print_install_results_and_exit 1
+      fi
+  else
+      echo "Error server log file not found $SERVER_LOGFILE"
+      print_install_results_and_exit 1
+  fi
+  
+  # Finish server setup
+  print_install_results_and_exit 0
+  ```
+- 2. 根据上述启动的code-server解析出来在linux服务器上生成的socket设备文件，其实也可以通过端口的方式进行链接。
+	- socket设备文件是通过ssh隧道执行命令之后，从返回中提取出来的。
+	- 这个设备文件是后续用来链接到本地local的。
+- 3. 在本地寻找一个合适的端口，或者也生成一个socket文件，用于本地与远程进行链接的。
+- 4. 最后通过ssh技术，实现了local port->socket port->remote port的串联链接，至此为止，基本的链接已经建立完成。
+- ### 5.6.2.  OpenSSH 插件源码
+  
+  [https://github.com/jeanp413/open-remote-ssh](https://github.com/jeanp413/open-remote-ssh)
