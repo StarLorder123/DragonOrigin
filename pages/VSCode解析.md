@@ -4039,4 +4039,48 @@
   ```
 - 看到这一行就意味这，在这个空窗口渲染的过程中，会去加载workbench.js文件。而这个文件就是渲染进程内主要执行的代码文件了。
 - 在workbench.js这个文件中，最最最重要的，就是提示我们，vscode的渲染进程使用bootstrap-window.js这个模块，加载了'vs/workbench/workbench.desktop.main','vs/nls!vs/workbench/workbench.desktop.main','vs/css!vs/workbench/workbench.desktop.main'这三个文件，其中workbench.desktop.main就是定义了这个窗口内各类元素行为的代码文件，其余两个是国际化和渲染相关的css文件。至此为止，vscode比较重要的加载顺序和大致框架就结束了，接下来就是各个进程加载的细节了。
--
+- ### 6.3.2.  Server和CLI形态
+- Server版、Server-CLI版以及CLI版都是没有界面的VSCode的形态。
+- 可以说，这几个形态都是为了VSCode实现多种情况下的开发而存在的。比如：Server版是为了SSH远程链接而诞生的。
+- 以Server版的启动流程为例：
+	- 可以看到Server版启动的第一个文件就是src\server-main.js文件。这个文件里面就执行一个函数，那就是main函数。
+	- 在这个函数当中可以看到一个和其他客户端不一样的地方：
+	  
+	  ```
+	  const server = http.createServer(async (req, res) => {
+	  if (firstRequest) {
+	  firstRequest = false;
+	  perf.mark('code/server/firstRequest');
+	  }
+	  const remoteExtensionHostAgentServer = await getRemoteExtensionHostAgentServer();
+	  return remoteExtensionHostAgentServer.handleRequest(req, res);
+	  });
+	  ```
+	- 那就是启动了一个Server。这个Server启动了之后，还定义了一个该Server如何处置request和response的方法函数。而getRemoteExtensionHostAgentServer方法就是具体启动的入口。
+	- 此外，这个Server还监听了其他的很多一些事件用于其他的用途。
+	- 其他的入口流程跟上面的客户端形态差不多。
+	- 特别提一下关于SSH如何使用的。我想应该是通过SSH链接到目标服务器了之后，下载Server，启动Server，然后使用Render Process去远程链接这个Server接口。可以说下图的进程架构图里面，Extension Host Process和File Watcher Process变成了远程的一个Server管理的进程了。
+- ## 6.4.  VSCode的进程架构
+- ### 6.4.1.  桌面版VSCode进程架构
+  
+  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1708783486463-ae551d0b-cc99-46f7-b21a-d5147c5ce1f0.png)
+- Main Process（主进程）：是VSCode的入口进程，负责窗口管理、进程间通信、自动更新等全局任务。是一个唯一的进程，即即使开启多个窗口都是只有一个VSCode主进程。
+- Shared Process（共享进程）：全局只有一个共享进程。为多个渲染进行提供一些共享的服务和数据。
+- Render Process（渲染进程）：负责一个窗口的渲染。一个窗口对应一个Render Process。一个Main Process与多个Render Process构成一个Electron应用程序的基本框架。
+- Extension Host Process（插件宿主进程/插件主机进程）：本质上是一个由主进程启动、渲染进程管理的插件管理器。该进程可以运行满足触发条件的插件进程。插件在启动过程中，插件被禁止直接访问UI。
+- Debugger Process（调试进程）：这是一个特殊化的插件
+- Search Process：搜索是一类计算密集型的任务，单开进程保证软件整体的体验和性能。
+- ### 6.4.2.  SSH Remote进程架构
+  
+  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1727941354106-fdded3ac-abd1-462e-904a-28c44bdac6aa.png)
+- SSH Remote是使用SSH协议构建的通信通道对远程服务器代码进行处理的一种形态，与之类似的还有Tunnel、Web形态，他们使用的通信协议不太一样而已。
+	- 这个形态下，需要区分Client端和Server端来进行解析。
+	- Client端，也就是Local端。在Local端，主要的进程就是主进程、Shared Process和Render Process，这几个进程都是上面描述的几个进程。
+	- 在Server端，也就是远程服务端，主要的进程架构就是VSCode Server版或者说Web版的主要进程架构模型。
+- Server端的进程主要分为Code-Server主进程、Extension Host进程、FileWatcher进程和Pty进程。
+- Server端的进程架构和桌面端的进程架构不太一样，只有一个Code-Server的进程。
+	- 在Code-Server进程里面，会有一个数据结构对来自Client端的网络Connection和Extension Host进程等进行一一对应的链接和管理。
+	- Extension Host进程这些都是由Code-Server进程创建出来的，也就是说Extension中的上下文是由Server端的Code-Server进程创建的，而不是Client端的主进程创建的。
+	- VSCode中的资源管理，包括文档读写、文件树的读写等功能都是在主进程和Render Process中实现的，是和Code-Server进行通信获取的，Extension Host则是和Render Process一一对应的。插件、终端等功能都是通过Extension Host进程来实现的。
+	- 多次使用同一个账户登录同一个服务器，只会创建同一个Code-Server进程，其他的Server端进程，会一一和Client的Render Process创建。
+- Server端也可以直接切换成Web版，也就是在Client端只保留一个Render Process，也就是浏览器的一个tab页面。
