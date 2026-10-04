@@ -4084,3 +4084,123 @@
 	- VSCode中的资源管理，包括文档读写、文件树的读写等功能都是在主进程和Render Process中实现的，是和Code-Server进行通信获取的，Extension Host则是和Render Process一一对应的。插件、终端等功能都是通过Extension Host进程来实现的。
 	- 多次使用同一个账户登录同一个服务器，只会创建同一个Code-Server进程，其他的Server端进程，会一一和Client的Render Process创建。
 - Server端也可以直接切换成Web版，也就是在Client端只保留一个Render Process，也就是浏览器的一个tab页面。
+- ## 6.5.  VSCode源代码结构
+- ### 6.5.1.  一级目录结构
+- build            编译构建脚本
+- extensions  VSCode内置插件
+- resources    平台相关静态资源，图标等
+- scripts         工具脚本，开发/测试
+- out              编译输出目录
+- src               源码目录
+- test             测试套件
+- gulpfile.js    gulp task
+- product.json  App meta 信息
+- ### 6.5.2.  源代码下主要的目录
+- src/vs：分层和模块化的 core
+	- base: 通用的公共方法
+	- code: VSCode应用主入口
+	- platform：可被依赖注入的各种基础服务
+	- editor: Monaco文本编辑器
+	- workbench：整体视图框架以及各种组件
+		- services：布局中所涉及的各种组件的实现
+		- contrib：是向外拓展功能性API的文件夹
+	- ~~languages: 历史版本中的语言插件目录，现在都迁移至/extentions~~
+- src/typings: 公共基础类型
+- ### 6.5.3.  Editor文件夹
+- vs/editor文件夹不能有任何对node和electon-browser的依赖
+- vs/editor/contrib编辑器内部的扩展文件夹，依赖browser，可打包进 VSCode或者独立编辑器
+- vs/editor/standalone 独立编辑器代码，任何代码不得依赖该目录
+- vs/workbench/contrib/codeEditor 打包进 VSCode的目录
+- ### 6.5.4.  Workbench工作台
+- VSCode工作台（vs/workbench）包含有很多特性以提供丰富的开发体验。比如全文搜索，git 和 debug。工作台核心不得直接依赖扩展包，VSCode使用一种内部机制将这些扩展注册到工作台。
+- 所有的工作台扩展（Contrib）都必须包含在vs/workbench/contrib，该目录有以下约定：
+	- vs/workbench/contrib目录下的代码不得依赖任何文件夹外部代码
+	- 每一个 Contrib如果要对外暴露，将API 在一个出口文件里面导出 (e.g. vs/workbench/contrib/search/common/search.ts)
+	- 一个 Contrib可以依赖其他 Contrib的API (e.g. the git contribution may depend on vs/workbench/contrib/search/common/search.ts)
+	- 一个 Contrib不得依赖其他 Contrib的非API内部文件
+	- 即使 Contrib可以调用另一个 Contrib的出口 API，也要审慎的考虑，应尽量避免两个 Contrib互相依赖
+- vscode界面组件的的源码位置在workbench/browser/parts下。每一个文件夹对应不同的组件
+- ### 6.5.5.  源代码文件夹规范
+- 内核里面每一层代码都会遵守 electron 规范，按不同环境细分文件夹:
+	- common: 公共的 js方法，在哪里都可以运行的
+	- browser: 只使用浏览器 API 的代码，可以调用 common
+	- node: 只使用 NodeJS API 的代码，可以调用 common
+	- electron-browser: 使用 electron 渲染线程和浏览器 API 的代码，可以调用 common，browser，node
+	- electron-main: 使用 electron 主线程和 NodeJS API 的代码，可以调用 common， node
+	- test: 测试代码
+	- electron-sandbox：是用于desktop的一些方法，这里面除了有渲染进程所依赖的内容方法之外，还有共享进程、工具进程所依赖的一些方法，需要进行甄别。
+- # 7.  VSCode构建说明
+- ## 7.1.  Windows平台
+- ### 7.1.1.  编译工具准备
+- Nodejs：最新VsCode代码官方要求Node.JS版本 >=18.15.x and <19
+- Yarn：官方要求Yarn版本号 >=1.10.1 and <2。需要全局安装
+- Python：Python的版本需要安装>=3.6以上的版本，确保要完整的安装python。
+- node-gyp：使用命令安装node-gyp：npm install node-gyp --global。
+- ternary-stream：使用命令安装ternary-stream：npm install ternary-stream --global
+- windows-build-tools：使用npm install --global windows-build-tools命令安装会失败；但在失败后C:\Users\xxx\.windows-build-tools下有安装文件vs_BuildTools，直接运行此文件，安装2017版本VS编译环境，选择如下两个安装项目：
+  
+  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090398293-d1658fe6-79d7-4b90-9fbb-1102eeaba9d6.png)
+	- 另外，如果在后面的过程中出现了Warning MSB8038和Fatal error LINK1181的问题，需要在这个阶段安装一下一个单个组件。
+	  
+	  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090578353-1442c3d4-d9e7-4447-9127-1fac13e58ce4.png)
+- ### 7.1.2.  编译过程
+- 另外打开一个cmd窗口，进入vscode代码目录，执行yarn命令。第一次的话这个过程时间比较长，且需要翻墙。上述提到的问题也可能在这个阶段发生。这个阶段其实是在下载项目所需要的代码库。如果向加快速度，可以将yarn.lock中的国外地址改为国内的yarn源地址即可。
+- 完成之后，执行命令 **yarn run watch **进行编译，过程可能会较久，也可以执行**yarn compile**。编译完成后显示如下：
+  
+  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090722496-3ca01944-3d18-47b6-ad09-e6edda03c5f9.png)
+- 不要关闭此窗口。
+- 运行VSCode的代码。另外起cmd命令窗，在代码目录下执行 .\scripts\code.bat 命令，结果如下：
+  
+  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090762965-2af1c7ea-145e-4c5f-949d-4c32d15145d1.png)
+  
+  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090767731-e1825163-375e-4023-8b08-1cb8b807e03b.png)
+- ### 7.1.3.  打包过程
+- 1. 安装打包工具 gulp ：npm install gulp -g
+- 2. 自研插件使用 yarn 命令下载依赖，不要使用 npm install，否则在编译绿色可执行文件时会出现依赖包异常；
+- 3. 拷贝插件完成后，在VsCode源码目录中重新执行 yarn、yarn run watch及运行.\scripts\code.bat，看下插件是否编译进去了；
+- 4. 在源码目录下，执行 yarn gulp vscode-win32-x64 命令，该命令会在与源码同目录下生成一个VSCode-win32-x64 文件夹，其中有个 Code - OSS.exe 绿色免安装文件，双击即可运行；该命令执行时间会比较长，耐心等待；
+  
+  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090860935-22d20234-9394-4110-bcdb-293be5bd3590.png)
+- 5. 完成步骤3后，在源码目录下执行命令yarn gulp vscode-win32-x64-inno-updater，该命令会在VSCode-win32-x64安装可安装文件所需要的工具，在tools目录下；
+  
+  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090854457-84c4f12d-a13c-4315-b324-88b196789008.png)
+- 6. 完成步骤4后，在源码目录下执行命令yarn gulp vscode-win32-x64-user-setup ，会在.build\win32-x64\user-setup目录下出现VSCodeSetup.exe安装文件，双击即可安装。
+- ## 7.2.  Linux平台-Debian/Ubuntu
+- ### 7.2.1.  编译工具准备
+- 首先基于6.1.1节的内容安装（windows-build-tools除外）。在linux的平台下，需要再安装一些C++的工具。
+- 在linux的环境下，还需要安装一些编译所用的包或模块。
+- 命令为：（这个命令是针对debian系列内核的）
+	- sudo apt-get install build-essential g++ libx11-dev libxkbfile-dev libsecret-1-dev python-is-python3
+- 如果出现定位不到python-is-python3包，那就不安装这个包。
+- 如果在yarn的时候，出现以下的问题时，安装一下libkrb5-dev这个包
+  
+  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1707272975054-b1560640-623b-4e3e-8530-3735e3e36004.png)
+	- sudo apt-get install libkrb5-dev
+- 在linux环境下安装python可以参考：
+  
+  [https://blog.csdn.net/wudi1107/article/details/123715139?ops_request_misc=%257B%2522request%255Fid%2522%253A%2522170606330816800188551900%2522%252C%2522scm%2522%253A%252220140713.130102334.pc%255Fall.%2522%257D&request_id=170606330816800188551900&biz_id=0&utm_medium=distribute.pc_search_result.none-task-blog-2~all~first_rank_ecpm_v1~rank_v31_ecpm-4-123715139-null-null.142^v99^pc_search_result_base5&utm_term=debian%20%E5%AE%89%E8%A3%85python3&spm=1018.2226.3001.4187](https://blog.csdn.net/wudi1107/article/details/123715139?ops_request_misc=%257B%2522request%255Fid%2522%253A%2522170606330816800188551900%2522%252C%2522scm%2522%253A%252220140713.130102334.pc%255Fall.%2522%257D&request_id=170606330816800188551900&biz_id=0&utm_medium=distribute.pc_search_result.none-task-blog-2~all~first_rank_ecpm_v1~rank_v31_ecpm-4-123715139-null-null.142%5ev99%5epc_search_result_base5&utm_term=debian%20%E5%AE%89%E8%A3%85python3&spm=1018.2226.3001.4187)
+- ### 7.2.2.  编译打包过程
+- 和windows平台一样，需要首先执行yarn、yarn compile这两个命令。待顺利通过之后，再执行后续的一些命令。
+- 不知道gulp有什么任务命令可以通过执行yarn run gulp --tasks来查看有什么样的命令
+- 在编译之前，需要修改一下vscode/build/linux/dependencies-generator.ts文件内的第89行。直接将第89行注释掉。如果已经生成了js文件，那就在对应的dependencies-generator.js中将该行注释掉。这里注掉的原因就是，如果不注掉，那么会导致打包失败，因为没办法复现vscode官方的打包环境。
+- 然后进入到项目的根目录下，顺序执行以下的命令：（下列命令中的yarn run gulp和gulp这两种可以相互代替，使用gulp的前提是已经全局安装了gulp这个工具）
+	- yarn run gulp vscode-linux-x64
+	- yarn run gulp vscode-linux-x64-prepare-deb
+	- yarn run gulp vscode-linux-x64-build-deb
+- 如果要编译的是linux的server版，直接执行一条就可以了：
+	- yarn run gulp vscode-reh-web-linux-x64
+- 在执行了prepare-deb之后，会在项目根目录下的.build/linux/deb/amd64下产生一个vscode-amd64的文件夹，这就是DEB包在打包压缩之前的形态。执行了build-deb命令之后，会在项目根目录下的.build/linux/deb/amd64/deb看到打完包的deb包。在gulp vscode-linux-x64执行完之后，会在项目代码的同级目录下生成一个linux的绿色版，直接进入到该目录下执行对应的脚本就可以启动了。
+- ## 7.3.  MacOS平台
+- ### 7.3.1.  编译工具准备
+- 在Macos下要准备的起始很简单，首先基于6.1.1节的内容安装（windows-build-tools除外），然后再Maxos的机子里再安装一个xcode就可以了。
+- ### 7.3.2.  编译打包过程
+- 和windows平台一样，需要首先执行yarn、yarn compile这两个命令。待顺利通过之后，再执行后续的一些命令。
+- 然后进入到项目的根目录下，顺序执行以下的命令：（下列命令中的yarn run gulp和gulp这两种可以相互代替，使用gulp的前提是已经全局安装了gulp这个工具）
+	- yarn run gulp vscode-darwin-x64
+	- yarn run gulp vscode-darwin-arm64
+- 只需要执行这两条命令就可以了。这里需要注意的是，如果要更换图标，需要将png的图标转化为icns图标。
+- ## 7.4.  注意点
+- 在打包的过程中，曾经因为一些原因删除了yarn.lock这个文件，然后重新yarn。会出现在yarn compile的过程中，报错导致打包过程中断的情况发生。这里的绝大部分原因是引用了很多的包之后，导致的包的新版本之间的冲突。这时候，可以直接使用vscode源码中的yarn.lock就可以规避这个问题。
+- ## 7.5.  小结
+- 从明白和理解VSCode的打包过程可以看出来，VSCODE的设计是相当紧凑和精巧的。通过不同的gulp打包任务的组合，可以打出vscode的web、windows、linux、macos版。从形式上来说，基本上兼顾了所有的编辑器的场景，并且结合SSH现成的技术，实现了远端操作项目的目的。
+- 理解vscode也可以从打包开始，找到每种形式的开端，也是可以慢慢花时间去理解vscode的源码结构。
