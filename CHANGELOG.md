@@ -12,6 +12,7 @@
 - Add JavaScript/TypeScript fundamentals and tooling notes (Proxy, closure, IIFE, Promise, Event/Emitter, Disposable, Barrier, the Node.js event loop, TypeScript, Webpack, Electron) to `pages/VSCode解析.md` and related `pages/*.md`
 - Add network/system notes (`pages/VSCode解析.md`) covering HTTP protocol upgrade, SSH port forwarding, and the Linux socket layer
 - Add embedded IDE observability notes (`pages/嵌入式IDE可观测性.md`) covering the JTAG physical/link layer (pin definitions, TAP state machine, electrical characteristics, timing, connection, daisy chaining, JTAG/SWD pin comparison), the TAP 16-state machine, scan-chain topology, the SWD two-wire half-duplex frame structure (Request/ACK/Turnaround/read-write transactions), and the JTAG↔SWD mode-switch sequence (SWJ switch sequence, `0xE79E`)
+- Add hardware-abstraction and debug-interaction chapters to `pages/嵌入式IDE可观测性.md` covering ARM ADI (v5/v6) DP/AP two-level access (SELECT paging, RDBUFF pipeline), RISC-V DTM/DMI/DM access (abstract commands, program buffer/SBA), CMSIS-DAP protocol (USB transport, packet format, command set), and OpenOCD target abstraction / MCU register mapping
 - Add gulp build tool note (`pages/gulp构建工具.md`) covering Vinyl/tasks/globs and VSCode win32 packaging
 - Add repository README (`README.md`)
 - Add daily journal entry for 2026-09-06 (`journals/2026_09_06.md`)

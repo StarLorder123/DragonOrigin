@@ -410,7 +410,6 @@
 - ### 1.4.1 SWD 的物理连接
   
   ![-TEAjVszm3hMVDgaOTASPC5hbVMEEkG5X2sLcRA-lsU=.png](../assets/-TEAjVszm3hMVDgaOTASPC5hbVMEEkG5X2sLcRA-lsU=_1791211962617_0.png)
-
 - 最基本的连接只有：
   
   ```
@@ -432,7 +431,6 @@
   所以 SWD 相比 JTAG 少了：TCK、TMS、TDI、TDO；
   变成：SWCLK、SWDIO；
   但它并不是简单地把 JTAG 的 4 根信号线“压缩”成 2 根线，而是重新定义了一套串行 Debug Port 访问协议。
-
 - ### 1.4.2 为什么 SWD 是半双工？
   
   SWDIO 是一根线。
@@ -564,7 +562,6 @@
   作用就是告诉 Target：
   
   > 一个新的 SWD Request 开始了。
-  
 - #### 1.4.4.2 APnDP
   
   ```
@@ -756,7 +753,6 @@
   PARITY = 1
   
   ```
-  
 - #### 1.4.4.6 STOP 和 PARK
   
   两个固定字段：
@@ -1385,42 +1381,40 @@
   CPU / Memory / Peripheral
   
   ```
-
-## 1.5 JTAG 与 SWD 模式切换序列（Line Reset / Select Code）
-
-这个问题是理解 **ARM Debug Port 从 JTAG-DP 切换到 SW-DP** 的关键。
-
-需要先明确一点：
-
-> **JTAG ↔ SWD 的切换，不是通过某个普通寄存器配置完成的，而是通过 SWJ-DP（Serial Wire/JTAG Debug Port）识别的特殊时序序列完成的。**
-
-典型 Cortex-M 调试器连接时，会经历：
-
-```
-上电
- │
- ▼
-JTAG 模式
- │
- │ 发送 SWJ Switch Sequence
- ▼
-SWD 模式
- │
- ▼
-SW-DP
- │
- ▼
-AP / MEM-AP
- │
- ▼
-MCU
-```
-
-### 1.5.1 为什么需要模式切换？
-
-ARM Cortex-M 的 Debug Port 可以支持两种物理调试接口：
-
-```
+- ## 1.5 JTAG 与 SWD 模式切换序列（Line Reset / Select Code）
+  
+  这个问题是理解 **ARM Debug Port 从 JTAG-DP 切换到 SW-DP** 的关键。
+  
+  需要先明确一点：
+  
+  > **JTAG ↔ SWD 的切换，不是通过某个普通寄存器配置完成的，而是通过 SWJ-DP（Serial Wire/JTAG Debug Port）识别的特殊时序序列完成的。**
+  
+  典型 Cortex-M 调试器连接时，会经历：
+  
+  ```
+  上电
+  │
+  ▼
+  JTAG 模式
+  │
+  │ 发送 SWJ Switch Sequence
+  ▼
+  SWD 模式
+  │
+  ▼
+  SW-DP
+  │
+  ▼
+  AP / MEM-AP
+  │
+  ▼
+  MCU
+  ```
+- ### 1.5.1 为什么需要模式切换？
+  
+  ARM Cortex-M 的 Debug Port 可以支持两种物理调试接口：
+  
+  ```
                  SWJ-DP
                    │
           ┌────────┴────────┐
@@ -1428,274 +1422,635 @@ ARM Cortex-M 的 Debug Port 可以支持两种物理调试接口：
        JTAG-DP            SW-DP
           │                 │
      TCK/TMS/TDI/TDO     SWCLK/SWDIO
-
-```
-
-也就是说，同一个 Debug Port：JTAG-DP和SW-DP共存。
-
-复用关系通常是：
-
-```
-JTAG              SWD
-────              ───
-TCK      ↔        SWCLK
-TMS      ↔        SWDIO
-TDI
-TDO
-nRESET
-```
-
-所以 MCU 并不知道你究竟想使用：JTAG还是SWD，必须通过特殊序列告诉它。
-
-### 1.5.2 SWJ Switch Sequence
-
-最经典的：JTAG → SWD，切换序列是：
-
-```
-SWDIO:
+  
+  ```
+  
+  也就是说，同一个 Debug Port：JTAG-DP和SW-DP共存。
+  
+  复用关系通常是：
+  
+  ```
+  JTAG              SWD
+  ────              ───
+  TCK      ↔        SWCLK
+  TMS      ↔        SWDIO
+  TDI
+  TDO
+  nRESET
+  ```
+  
+  所以 MCU 并不知道你究竟想使用：JTAG还是SWD，必须通过特殊序列告诉它。
+- ### 1.5.2 SWJ Switch Sequence
+  
+  最经典的：JTAG → SWD，切换序列是：
+  
+  ```
+  SWDIO:
     50 个连续的 1
           ↓
     16-bit JTAG-to-SWD
           ↓
     至少 2 个 idle cycle
-
-```
-
-也就是：
-
-```
-┌────────────────────┐
-│ 50 × 1             │
-└─────────┬──────────┘
+  
+  ```
+  
+  也就是：
+  
+  ```
+  ┌────────────────────┐
+  │ 50 × 1             │
+  └─────────┬──────────┘
           ↓
-┌────────────────────┐
-│ JTAG → SWD sequence│
-│      0xE79E        │
-└─────────┬──────────┘
+  ┌────────────────────┐
+  │ JTAG → SWD sequence│
+  │      0xE79E        │
+  └─────────┬──────────┘
           ↓
-┌────────────────────┐
-│ idle ≥ 2 clocks    │
-└────────────────────┘
-
-```
-
-这里有一个**非常容易踩坑的地方**：
-
-> `0xE79E` 是按 SWD/JTAG switch sequence 的位发送规则描述的，不能简单理解成“在 SWDIO 上先发送 0xE7，再发送 0x9E”。
-
-实际发送时需要按照 **LSB-first** 的方式发送这个 16-bit 序列。
-
-### 1.5.3 为什么要先发送 50 个 1？
-
-这是为了让 Debug Port 进入一个**确定状态**。
-
-可以理解为：
-
-```
-SWDIO = 1
-SWCLK ↑
-SWDIO = 1
-SWCLK ↑
-SWDIO = 1
-SWCLK ↑
-...
-
-```
-
-连续：≥ 50 cycles，之后：JTAG TAP
-
-会被置于一种不会误识别普通 JTAG 操作的状态。
-
-这一步可以理解成：
-
-> **Synchronize / Reset the interface state**
-
-所以一个可靠的 Debug Probe 在尝试切换接口之前，通常都会先发送大量 `1`。
-
-***
-
-### 1.5.4 JTAG → SWD 的完整序列
-
-假设当前 MCU 处于：JTAG mode
-
-Host Debug Probe，想切换成：SWD mode
-
-那么：
-
-```
-SWDIO
- │
- │ 11111111111111111111111111111111111111111111111111
- │  └──────────── 50 × 1 ──────────────────────────┘
- │
- │  JTAG → SWD sequence
- │
- │  0xE79E
- │
- │  Idle
- │
- ▼
-SWD mode
-```
-
-时钟：
-
-```
-SWCLK
- ↑ ↓ ↑ ↓ ↑ ↓ ↑ ↓ ↑ ↓ ...
-```
-
-这里 **SWCLK 必须继续提供时钟**，因为 SWDIO 上的序列本质上仍然是一个串行协议操作。
-
-### 1.5.5 `0xE79E` 到底怎么发送？
-
-这是学习 SWD 时特别值得搞清楚的一个细节。
-
-假设：0xE79E
-
-二进制：
-
-```
-1110 0111 1001 1110
-
-```
-
-如果按照 MSB-first：
-
-```
-1110011110011110
-```
-
-但 SWD/SWJ sequence 的发送是：LSB-first
-
-所以实际 bit 顺序是：0111100111100111
-
-也就是：
-
-```
-0 1 1 1 1 0 0 1 1 1 1 0 0 1 1 1
-```
-
-因此实现一个 Probe 时，不能简单：send\_u16(0xE79E);
-
-然后默认硬件会按照你想要的方向发送。
-
-必须确认底层 SPI/GPIO/FPGA：bit order
-
-到底是什么。
-
-### 1.5.6 切换后为什么还要 Idle？
-
-切换序列之后通常需要：至少 2 个 clock cycles的 idle。
-
-可以理解为：
-
-```
-Switch Sequence
+  ┌────────────────────┐
+  │ idle ≥ 2 clocks    │
+  └────────────────────┘
+  
+  ```
+  
+  这里有一个**非常容易踩坑的地方**：
+  
+  > `0xE79E` 是按 SWD/JTAG switch sequence 的位发送规则描述的，不能简单理解成“在 SWDIO 上先发送 0xE7，再发送 0x9E”。
+  
+  实际发送时需要按照 **LSB-first** 的方式发送这个 16-bit 序列。
+- ### 1.5.3 为什么要先发送 50 个 1？
+  
+  这是为了让 Debug Port 进入一个**确定状态**。
+  
+  可以理解为：
+  
+  ```
+  SWDIO = 1
+  SWCLK ↑
+  SWDIO = 1
+  SWCLK ↑
+  SWDIO = 1
+  SWCLK ↑
+  ...
+  
+  ```
+  
+  连续：≥ 50 cycles，之后：JTAG TAP
+  
+  会被置于一种不会误识别普通 JTAG 操作的状态。
+  
+  这一步可以理解成：
+  
+  > **Synchronize / Reset the interface state**
+  
+  所以一个可靠的 Debug Probe 在尝试切换接口之前，通常都会先发送大量 `1`。
+  
+  ***
+- ### 1.5.4 JTAG → SWD 的完整序列
+  
+  假设当前 MCU 处于：JTAG mode
+  
+  Host Debug Probe，想切换成：SWD mode
+  
+  那么：
+  
+  ```
+  SWDIO
+  │
+  │ 11111111111111111111111111111111111111111111111111
+  │  └──────────── 50 × 1 ──────────────────────────┘
+  │
+  │  JTAG → SWD sequence
+  │
+  │  0xE79E
+  │
+  │  Idle
+  │
+  ▼
+  SWD mode
+  ```
+  
+  时钟：
+  
+  ```
+  SWCLK
+  ↑ ↓ ↑ ↓ ↑ ↓ ↑ ↓ ↑ ↓ ...
+  ```
+  
+  这里 **SWCLK 必须继续提供时钟**，因为 SWDIO 上的序列本质上仍然是一个串行协议操作。
+- ### 1.5.5 `0xE79E` 到底怎么发送？
+  
+  这是学习 SWD 时特别值得搞清楚的一个细节。
+  
+  假设：0xE79E
+  
+  二进制：
+  
+  ```
+  1110 0111 1001 1110
+  
+  ```
+  
+  如果按照 MSB-first：
+  
+  ```
+  1110011110011110
+  ```
+  
+  但 SWD/SWJ sequence 的发送是：LSB-first
+  
+  所以实际 bit 顺序是：0111100111100111
+  
+  也就是：
+  
+  ```
+  0 1 1 1 1 0 0 1 1 1 1 0 0 1 1 1
+  ```
+  
+  因此实现一个 Probe 时，不能简单：send\_u16(0xE79E);
+  
+  然后默认硬件会按照你想要的方向发送。
+  
+  必须确认底层 SPI/GPIO/FPGA：bit order
+  
+  到底是什么。
+- ### 1.5.6 切换后为什么还要 Idle？
+  
+  切换序列之后通常需要：至少 2 个 clock cycles的 idle。
+  
+  可以理解为：
+  
+  ```
+  Switch Sequence
       │
       ▼
- ┌─────────┐
- │ Idle    │
- │  ≥2 clk │
- └────┬────┘
+  ┌─────────┐
+  │ Idle    │
+  │  ≥2 clk │
+  └────┬────┘
       ▼
    SW-DP
-
-```
-
-这样 Target 有时间完成：JTAG-DP->SW-DP接口状态切换。
-
-### 1.5.7 SWD → JTAG
-
-反过来也可以：
-
-```
-SWD
- ↓
-JTAG
-```
-
-使用：50 × 1，之后发送：JTAG-to-SWD switch sequence 的反向序列
-
-经典序列为：0xE73C，然后：≥ 2 idle clocks
-
-所以可以记成：
-
-```
+  
+  ```
+  
+  这样 Target 有时间完成：JTAG-DP->SW-DP接口状态切换。
+- ### 1.5.7 SWD → JTAG
+  
+  反过来也可以：
+  
+  ```
+  SWD
+  ↓
+  JTAG
+  ```
+  
+  使用：50 × 1，之后发送：JTAG-to-SWD switch sequence 的反向序列
+  
+  经典序列为：0xE73C，然后：≥ 2 idle clocks
+  
+  所以可以记成：
+  
+  ```
           50 × 1
              │
      ┌───────┴────────┐
      │                │
      ▼                ▼
- JTAG → SWD        SWD → JTAG
+  JTAG → SWD        SWD → JTAG
      │                │
    0xE79E           0xE73C
      │                │
      └───────┬────────┘
              ▼
           Idle ≥2
-
-```
-
-### 1.5.8 一个实际 Debug Probe 的初始化流程
-
-如果你以后自己实现一个类似 **J-Link/OpenOCD Debug Probe** 的底层驱动，这个流程就非常重要。
-
-典型流程可以是：
-
-```
-① Probe 上电
+  
+  ```
+- ### 1.5.8 一个实际 Debug Probe 的初始化流程
+  
+  如果你以后自己实现一个类似 **J-Link/OpenOCD Debug Probe** 的底层驱动，这个流程就非常重要。
+  
+  典型流程可以是：
+  
+  ```
+  ① Probe 上电
        │
        ▼
-② SWCLK 输出
+  ② SWCLK 输出
        │
        ▼
-③ SWDIO 输出
+  ③ SWDIO 输出
        │
        ▼
-④ 发送 ≥50 个 1
+  ④ 发送 ≥50 个 1
        │
        ▼
-⑤ 发送 JTAG → SWD Switch Sequence
+  ⑤ 发送 JTAG → SWD Switch Sequence
        │
        ▼
-⑥ SWDIO 释放
+  ⑥ SWDIO 释放
        │
        ▼
-⑦ Idle ≥2 clocks
+  ⑦ Idle ≥2 clocks
        │
        ▼
-⑧ 开始 SWD transaction
+  ⑧ 开始 SWD transaction
        │
        ▼
-⑨ 读取 DP IDCODE
+  ⑨ 读取 DP IDCODE
        │
        ▼
-⑩ 初始化 DP
+  ⑩ 初始化 DP
        │
        ▼
-⑪ 初始化 AP
+  ⑪ 初始化 AP
        │
        ▼
-⑫ MEM-AP
+  ⑫ MEM-AP
        │
        ▼
-⑬ 访问 MCU Memory / Core Register
-
-```
-
-其中：读取 DP IDCODE是非常重要的验证步骤。
-
-如果你切换 SWD 后能够正确读到：DP IDCODE
-
-基本就可以证明：
-
-```
-SWDIO
-SWCLK
-SWJ switch
-SWD transaction
-SW-DP
-```
-
-整个链路基本已经工作。
+  ⑬ 访问 MCU Memory / Core Register
+  
+  ```
+  
+  其中：读取 DP IDCODE是非常重要的验证步骤。
+  
+  如果你切换 SWD 后能够正确读到：DP IDCODE
+  
+  基本就可以证明：
+  
+  ```
+  SWDIO
+  SWCLK
+  SWJ switch
+  SWD transaction
+  SW-DP
+  ```
+  
+  整个链路基本已经工作。
+- # 第 2 章：硬件抽象层（调试器与驱动）
+- ## 2.1 ARM ADI（v5/v6）架构中的 DP 与 AP 访问原理
+  
+  ARM ADI（Debug Interface Specification）规范定义了外部调试器与芯片内部 CoreSight 调试组件通信的架构。整体核心是由 **Debug Access Port (DAP)** 构成的两级分层访问机制：外部连接控制 **DP (Debug Port)**，再由 DP 路由控制多个 **AP (Access Port)** 访问芯片内部的总线与组件。
+  
+  **1. 架构分层职责**
+  
+  * **Debug Port (DP):** 负责处理外部物理协议（SWD、JTAG 或 ADIv6 中的 SWJ-DP/MIN-DP），提供对调试器本身控制寄存器（如上电、选择 AP）的直接访问。
+  * **Access Port (AP):** 负责对接芯片内部的系统总线或调试组件。常见的有 **MEM-AP**（通过 AHB/AXI/APB 总线直接读写内存及外设）和 **JTAG-AP**。
+  
+  **2. DP 访问原理**
+  
+  DP 寄存器空间很小（通常只暴露 4 个地址偏移：`0x0`, `0x4`, `0x8`, `0xC`），通过内部 **SELECT 寄存器** 实现分页与寻址：
+  
+  * **SELECT 寄存器（DP 偏移 0x8）:**
+  * **APSEL:** 选择当前要操作的 AP 端口索引（最多支持 256 个 AP）。
+  * **APBANKSEL \[7:4]:** 选择当前 AP 内部的寄存器页（Bank）。
+  * **DPBANKSEL \[3:0]:** 选择 DP 自身的寄存器页（ADIv5/v6 用于扩展 DP 寄存器）。
+  * **常规 DP 访问流程:**
+  1. 调试器向 DP 发送硬件级别的协议命令（如 SWD 读写请求）。
+  2. 读写 `DP0x00`（IDCODE）、`DP0x04`（CTRL/STAT，用于给 Debug 系统供电及状态查询）、`DP0x08`（SELECT）和 `DP0x0C`（RDBUFF，读取缓冲）。
+  
+  **3. AP 访问原理**
+  
+  AP 寄存器无法直接通过物理总线的线缆指令读写，必须**借助 DP 间接透传**：
+  
+  1. **设置寻址目标:** 调试器写入 `DP SELECT` 寄存器，设定 `APSEL`（目标 AP）和 `APBANKSEL`（目标页）。
+  2. **发出 AP 访问命令:** 物理层发起对 AP 寄存器的读写指令（如 SWD 的 `APnDP=1` 访问标志）。
+  3. **读写解耦 (Pipeline 机制):**
+   * **写 AP:** 数据通过 DP 传输直接写入目标 AP 寄存器。
+   * **读 AP:** 读 AP 寄存器是**两阶段异步**的。发起 AP 读指令后，AP 将数据打入 DP 的 `RDBUFF`，此时物理线上返回的数据往往是上一次传输的旧值；调试器需紧接着读取 `DP RDBUFF`（`DP 0x0C`）才能拿到真实的 AP 读结果。
+  
+  **4. 典型场景：通过 MEM-AP 读写内存**
+  
+  读写芯片 RAM 或外设寄存器是调试中最常见的 AP 操作，依靠 MEM-AP 内部的 4 个核心寄存器实现：
+  
+  |                                     |                                                                     |
+  | ----------------------------------- | ------------------------------------------------------------------- |
+  | **CSW (Control/Status Word)**       | 配置传输属性（如数据位宽 8/16/32-bit、地址自动递增模式）            |
+  | **TAR (Transfer Address Register)** | 写入要访问的芯片物理内存地址（如 `0x20000000`）                     |
+  | **DRW (Data Read/Write)**           | 读写数据的通道。写入即发起写内存，读取（结合 `RDBUFF`）即发起读内存 |
+  | **BD0\~BD3 (Banked Data)**          | 配合地址自动递增进行高效块传输                                      |
+  
+  **读内存操作示例步骤:**
+  
+  1. 配置 `DP SELECT` 选中 MEM-AP 及对应 Bank。
+  2. 写 `CSW` 配置为 32-bit 自动递增模式。
+  3. 写 `TAR` = `0x20000000`（设置目标起始地址）。
+  4. 读 `DRW`（触发 MEM-AP 向总线发起总线读，同时启动 DP 传输）。
+  5. 读 `DP RDBUFF`（或连续读取下一个 `DRW`）获取真正从 `0x20000000` 读出的数据。
+- ## 2.2 RISCV DTM访问原理
+  
+  ![fN3UKUWuLLfosLrhB8zD5q8e0oaqRe-GT7JZa7ccMqQ=.png](../assets/fN3UKUWuLLfosLrhB8zD5q8e0oaqRe-GT7JZa7ccMqQ=_1791212594901_0.png)
+- RISC-V 的核心访问链条可以概括为：**DTM (物理连接) ➔ DMI (内部总线) ➔ DM (控制核心) ➔ Hart (CPU核) / System Bus (内存)**。
+- ### 2.2.1. 核心架构组件及职责
+  
+  |                                      |                                      |                                                                                                                                                                |
+  | ------------------------------------ | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | **DTM***(Debug Transport Module)*    | **DP**                               | **物理传输模块**。对接外部物理总线（JTAG、cJTAG 或 USB 等），负责解包外部物理信号，并转换为芯片内部统一的 **DMI** 总线事务。                                   |
+  | **DMI***(Debug Transport Interface)* | 相当于 DP 与 AP 之间的内部总线       | **调试传输接口**。一条极简的内部读写总线，包含 Address（通常 7-12 bit）、Data（32 bit）和 Operation（Read/Write/NOP）。                                        |
+  | **DM***(Debug Module)*               | 类似于 **MEM-AP / Core-AP** 的集合体 | **调试核心模块**。包含控制 CPU 停机/单步的寄存器、抽象命令接口（Abstract Commands）、程序缓冲区（Program Buffer）以及系统总线访问控制器（System Bus Access）。 |
+  | **Hart***(Hardware Thread)*          | **CPU Core**                         | RISC-V 规范中的硬件线程/处理器核心。DM 通过发送控制信号或注入指令来操作 Hart。                                                                                 |
+- ### 2.2.2. DTM ➔ DMI 的访问原理
+  
+  外部调试器（如 OpenOCD / J-Link）无法直接操作 DM，必须先经过 DTM 翻译：
+  
+  1. **JTAG IR / DR 操作**：以常见的 JTAG DTM 为例，TAP 控制器定义了特殊的 JTAG 寄存器，如 `dtmcs`（DTM 控制和状态）和 `dmi`（DMI 访问寄存器）。
+  2. **通过 DMI 寄存器发起请求**：调试器将 `[Address, Data, Opcode]` 打包移入 JTAG 的 `dmi` 寄存器：
+   * `Opcode = 1`：读操作 (Read)
+   * `Opcode = 2`：写操作 (Write)
+  3. **两阶段读机制**：与 ARM 的 `RDBUFF` 异步读类似，RISC-V 发起 DMI Read 请求后，DTM 会异步去读 DM；调试器在下一个 JTAG 扫描周期才能从 `dmi` 寄存器中把读到的数据移出。
+- ### 2.2.3. DM 内部的两种主流访问机制
+  
+  选中 DM 后，调试器如何控制 CPU 或读写内存？RISC-V 提供了两种互补机制：
+- #### 2.2.3.1. **机制 A：抽象命令 (Abstract Commands) —— 控制与寄存器访问**
+  
+  调试器通过读写 DM 内部固定的 **Abstract Command 寄存器组** 来控制 Hart 或访问 CPU 内部通用寄存器（`x0`-`x31`）、CSR 等：
+  
+  1. **设置目标**：写 `dmcontrol` 寄存器中的 `hartsel`，选中当前要调试的 Hart。
+  2. **发起 Abstract Cmd**：写 `command` 寄存器，设定动作（如“读取寄存器 `x10`”）。
+  3. **获取结果**：检查 `abstractcs` 中的 `busy` 标志；完成后从 `data0` 寄存器直接取出 `x10` 的值。
+  
+  > **停止/复位 Hart**：也是通过写 `dmcontrol` 寄存器的 `haltreq`（暂停）、`resethaltreq`（复位后立即暂停）等控制位实现。
+- #### 2.2.3.2. **机制 B：程序缓冲区 (Program Buffer) & 系统总线 (SBA) —— 内存访问**
+  
+  读写 RAM 或外设寄存器通常有两种途径：
+  
+  1. **Program Buffer (PBuf) 注入执行**：
+   * DM 内部包含一小块 SRAM（通常 2\~8 条指令大小）。
+   * 调试器将几条正常的 RISC-V 汇编指令（如 `lw x10, 0(x11)`）写入 Program Buffer。
+   * DM 强制让 Hart 执行这几条指令，从而借助 CPU 自身的能力读写内存。
+  2. **System Bus Access (SBA) 直接总线访问**（类似于 ARM 的 MEM-AP）：
+   * 如果 DM 硬件集成了 SBA 模块，DM 自身就具备直接接管系统总线（如 AHB/AXI/TileLink）的能力。
+   * 调试器设置 `sbaddress0`（目标物理地址），读写 `sbdata0` 即可直接触发总线读写，**无需打扰 CPU 执行**。
+- ## 2.3 CMSIS-DAP协议解析
+  
+  **CMSIS-DAP**（Cortex Microcontroller Software Interface Standard - Debug Access Port）是 ARM 官方推出的开源调试协议标准，用于将上位机（PC）的调试指令转换为目标芯片（ARM Cortex 内核）的 SWD/JTAG 信号。
+- ### 2.3.1. 协议核心架构
+  
+  CMSIS-DAP 位于 Host（PC 调试软件，如 Keil、OpenOCD）与 Target（目标 MCU）之间，扮演传输桥梁的角色：
+  
+  * **上位机 (Host PC)**：通过 USB 发送预设的 DAP 命令（Command Packet）。
+  * **固件 (DAP Firmware)**：运行在 MCU 上，解析 USB 命令并驱动 GPIO/硬件外设产生 SWD 或 JTAG 时序。
+  * **目标板 (Target Device)**：通过 SWD/JTAG 接口连接到 DAP 硬件，响应内存读写、寄存器访问及复位操作。
+  
+  在 ARM 生态体系中，CMSIS-DAP 占据着**连接软件生态与硬件调试物理层**的核心纽带位置：
+  
+  ```
+  +-------------------------------------------------------------+
+  |    上位机 IDE / 调试器 (Keil MDK, OpenOCD, CLion, VS Code)    |
+  +-------------------------------------------------------------+
+                              │  (1. CMSIS-DAP Command Packet)
+                              ▼
+  +-------------------------------------------------------------+
+  |    调试器 MCU (例如 STM32F103 / RP2040 运行 DAP 固件)         |
+  +-------------------------------------------------------------+
+                              │  (2. 硬件物理波形)
+                              ▼
+  +-------------------------------------------------------------+
+  |    目标芯片 CoreSight 架构 (DP -> AP -> Memory/CPU Regs)     |
+  +-------------------------------------------------------------+
+  
+  ```
+  
+  1. **破除私有厂商壁垒**：在 CMSIS-DAP 出现前，主流调试器协议多为闭源私有（如 J-Link 的 JTAG 封装协议、ST-Link 专有协议）。CMSIS-DAP 作为 **ARM 官方开源标准**，让任何硬件厂商和开发者都能零授权费实现标准的调试器。
+  2. **连接 IDE 与物理硬件的“翻译官”**：上位机（如 OpenOCD、Keil）无需了解具体的 USB 读写细节和微控制器 GPIO 翻转逻辑，只需打包标准 DAP 命令；硬件端则只需专注于把 DAP 命令高效翻译成物理 SWD/JTAG 电平。
+  3. **CoreSight 系统的透传接口**：它本质上是 ARM **CoreSight 架构**的远程调用协议（RPC）。它通过标准指令直接映射访问目标芯片内部的 **DP（Debug Port）** 和 **AP（Access Port）**，从而实现对 CPU 内核（内核寄存器、断点控制）和系统总线（RAM/Flash）的绝对控制。
+- ### 2.3.2. 传输层版本对比 (USB Transport)
+  
+  CMSIS-DAP 协议定义了指令集，但在 USB 传输层有两个主流版本：
+  
+  | USB 接口类 | USB HID (Human Interface Device)  | USB WinUSB / Bulk                            |
+  | ---------- | --------------------------------- | -------------------------------------------- |
+  | 驱动要求   | 免驱（利用操作系统自带 HID 驱动） | 需要 WinUSB 驱动（Windows 10/11 可自动加载） |
+  | 传输速度   | 较慢（受到 HID 1ms 轮询周期限制） | 极快（充分利用 USB Bulk 满速/高速带宽）      |
+  | 常见应用   | 早期 DAPLink 制作、对速率要求不高 | 现代高性能调试器（如 J-Link 替代方案）       |
+- ### 2.3.3. 数据包结构 (Packet Format)
+  
+  CMSIS-DAP 的通信模式采用 **请求-响应 (Request-Response)** 机制。上位机发送发送数据包（Request），调试器执行后返回应答数据包（Response）。
+  
+  请求数据包 (Request Packet)
+  
+  ```
+  +-----------------+-------------------+-----------------------+
+  |  Command ID     |  Data Byte 1      |  Data Byte 2 ...      |
+  |  (1 Byte)       |  (参数/寄存器/地址) |  (有效 Payload 数据)    |
+  +-----------------+-------------------+-----------------------+
+  
+  ```
+  
+  响应数据包 (Response Packet)
+  
+  ```
+  +-----------------+-------------------+-----------------------+
+  |  Command ID     |  Status / Count   |  Return Data ...      |
+  |  (1 Byte)       |  (执行状态/成功数) |  (读取到的数据)        |
+  +-----------------+-------------------+-----------------------+
+  
+  ```
+- ### 2.3.4. 关键命令分类 (Command Set)
+  
+  CMSIS-DAP 指令集包含以下几类核心命令：
+  
+  **通用信息类 (General Information)**
+  
+  * `DAP_Info (0x00)`：获取调试器的基本信息（固件版本、Vendor 名称、最大 Pack Size 等）。
+  * `DAP_Connect (0x02)`：建立调试连接，指定使用 **SWD Mode (1)** 或 **JTAG Mode (2)**。
+  * `DAP_Disconnect (0x03)`：断开与目标芯片的连接。
+  * `DAP_HostStatus (0x01)`：控制调试器上的 LED（如连接状态灯、运行状态灯）。
+  
+  **时序与控制类 (Control & Timing)**
+  
+  * `DAP_Delay (0x09)`：等待指定微秒数。
+  * `DAP_ResetTarget (0x0A)`：触发目标芯片复位信号线（RESET 引脚）。
+  * `DAP_SWJ_Clock (0x11)`：设置 SWD/JTAG 接口的时钟频率（TCK / SWCLK）。
+  
+  **核心读写传输 (SWD/JTAG Transfer)**
+  
+  * `DAP_Transfer (0x05)`：**核心指令**。用于批量执行 SWD/JTAG 的 DP (Debug Port) 或 AP (Access Port) 寄存器读写。
+  * 请求中包含一系列 Transfer Request Byte（指定 DP/AP 寄存器地址、读写标志）。
+  * 返回实际执行成功的传输次数及读取的数据。
+  * `DAP_TransferBlock (0x06)`：用于对单个 DP/AP 寄存器进行**连续块读写**（大大提高了烧录 Flash 和读取大块内存的效率）。
+  
+  **SWD/JTAG 特有配置**
+  
+  * `DAP_SWD_Configure (0x13)`：配置 SWD 模式下的数据周转时间（Turnaround Period）、数据校验（Data Phase）等。
+  * `DAP_SWJ_Sequence (0x12)`：直接输出自定义的 SWCLK/SWDIO 序列（常用于切换 SWD/JTAG 模式，即 JTAG-to-SWD 序列）。
+- ### 2.3.5. 一次典型调试调用的数据流
+  
+  以 OpenOCD 通过 SWD 模式读取 MCU RAM 内存为例：
+  
+  1. **握手初始化**：
+   * PC 发送 `DAP_Connect (0x02)`\$\rightarrow\$ DAP 初始化 SWD 引脚，返回 `0x01`（成功）。
+   * PC 发送 `DAP_SWJ_Clock (0x11, Clock=1000000)`\$\rightarrow\$ 设置 SWCLK 为 1MHz。
+   * PC 发送 `DAP_SWJ_Sequence` 刷出复位及 JTAG-to-SWD 切换序列。
+  2. **连接调试端口**：
+   * PC 发送 `DAP_Transfer (0x05)` 读 DP 的 `IDCODE` 寄存器，验证 CPU 类型（如 Cortex-M4）。
+  3. **内存读写**：
+   * PC 通过 `DAP_Transfer` 配置 AP 的 `TAR`（Target Address Register）为目标 RAM 地址。
+   * PC 发送 `DAP_TransferBlock (0x06)` 批量读取 `DRW`（Data Read/Write Register），把芯片 RAM 内的数据回传给 PC。
+- ### 2.3.6. 参考资料
+  
+  https://arm-software.github.io/CMSIS-DAP/latest/index.html
+  
+  https://github.com/ARM-software/CMSIS-DAP
+- # 第 3 章：调试交互模型（GDB/LLDB 状态机与符号抽象）
+- ## 3.1 OpenOCD target抽象层与MCU寄存器映射机制
+  
+  OpenOCD（Open On-Chip Debugger）的 **Target 抽象层** 与 **MCU 寄存器映射机制** 是其能够跨越不同的 CPU 架构（如 ARM Cortex-M/A/R、RISC-V、MIPS）和各大厂商 MCU，实现统一调试接口的核心架构。
+- ### 3.1.1. Target 抽象层架构
+  
+  OpenOCD 的 Target 抽象层采用面向对象的 C 语言设计设计模式（即通过结构体与函数指针表实现继承与多态），将具体的硬件差异抽象为统一的操作接口。
+  
+  ```
+              ┌───────────────────────────┐
+              │   GDB Server / Telnet CLI │
+              └─────────────┬─────────────┘
+                            │ (调用统一接口)
+              ┌─────────────▼─────────────┐
+              │   Target Interface (C API) │
+              └─────────────┬─────────────┘
+                            │
+      ┌─────────────────────┼─────────────────────┐
+      │                     │                     │
+  ┌─────▼──────────┐   ┌──────▼─────────┐   ┌───────▼────────┐
+  │ Cortex-M Target│   │ RISC-V Target  │   │  MIPS Target   │
+  └─────┬──────────┘   └──────┬─────────┘   └───────┬────────┘
+      │                     │                     │
+  ┌─────▼──────────┐   ┌──────▼─────────┐   ┌───────▼────────┐
+  │  ADI v5 / DP   │   │ RISC-V Debug Module│ MIPS EJTAG    │
+  └────────────────┘   └────────────────┘   └────────────────┘
+  
+  ```
+  
+  核心数据结构 `struct target`
+  
+  在源码 `src/target/target.h` 中，`struct target` 定义了一个调试目标的抽象实体。它主要包含三部分：
+  
+  * **状态与元数据**：如目标状态（`TARGET_RUNNING`, `TARGET_HALTED`, `TARGET_RESET`）、架构类型、内存映射等。
+  * **Target Type 函数指针表 (****`struct target_type *type`****)**：多态的核心，声明了所有必须或可选实现的操作（如读写内存、复位、断点控制等）。
+  * **架构专属私有数据 (****`void *arch_info`****)**：指向特定架构的上下文结构体，如 `struct armv7m_common` 或 `struct riscv_info`。
+  * **`struct target`****（基类实例）**：记录具体芯片的操作状态（`TARGET_HALTED`, `TARGET_RUNNING`）、内核类型、打断点/观察点的链表，以及所属的 `target_type` 指针。
+  * **`struct target_type`****（虚函数表 vtable）**：每种内核架构（如 `cortex_m.c`、`riscv-013.c`）都会静态定义一个该类型的结构体变量，包含指向具体 API 实现的函数指针。
+  * **架构特定私有结构体（子类数据扩展）**：
+  * 对于 ARM Cortex-M：`target->arch_info` 指向 `struct armv7m_common`，其中包含 NVIC（中断控制器）、FPB（硬件断点/重映射单元）、DWT（数据观察点和追踪）等硬件特征。
+  * 对于 RISC-V：`target->arch_info` 指向 `struct riscv_info`，包含 Debug Module (DM) 寄存器地址和 abstract command 支持状态。
+  
+  关键 Target 接口函数
+  
+  | poll()                              | 查询目标 CPU 当前运行状态 | 读取 Debug Fault Status Register (DFSR)      |
+  | ----------------------------------- | ------------------------- | -------------------------------------------- |
+  | halt()                              | 强制暂停 CPU 运行         | 向 CoreDebug->DHCSR 写入 Halt 指令           |
+  | resume()                            | 恢复运行                  | 还原上下文并向 DHCSR 写入 Debug Key & Enable |
+  | read\_memory() / write\_memory()    | 读写目标总线内存空间      | 通过 ADI v5 AP 接口发起 AHB/AXI 总线事务     |
+  | read\_phys\_memory()                | 读写物理内存（绕过 MMU）  | 直接调用物理总线访问接口                     |
+  | assert\_reset() / deassert\_reset() | 控制硬件/软件复位信号     | 操作 SRST 引脚或触发 NVIC System Reset       |
+- ### 3.1.2. MCU 寄存器映射机制
+  
+  OpenOCD 对 MCU 寄存器的映射分为 **CPU 核心通用寄存器（Core Registers）** 与 **外设/特殊功能寄存器（SFRs / Peripheral Registers）** 两个维度。
+  
+  CPU 通用寄存器的映射与缓存 (`reg_cache`)
+  
+  为了让 GDB 能够读取和修改 CPU 寄存器（如 R0\~R15、PC、SP、PSR 等），OpenOCD 建立了统一的寄存器缓存机制。
+  
+  ```
+  GDB (发送 'g' / 'p' 包)
+   │
+   ▼
+  OpenOCD reg_cache ───(缓存有效?)───► [直接返回 Cache 数据]
+   │ No
+   ▼
+  架构专属 read_reg()
+   │
+   ▼ (以 ARM Cortex-M 为例)
+  操作 DCRSR / DCRDR 调试寄存器
+   │
+   ▼
+  硬件 CPU Core 寄存器
+  
+  ```
+  
+  * **`struct reg`****&#x20;与&#x20;****`struct reg_cache`**：每个寄存器对应一个 `struct reg`，包含寄存器名称、大小（Bit 宽度）、数据缓冲区指针（`value`）、状态标志（`dirty` 表示已被修改未同步到硬件，`valid` 表示当前缓存值有效）。
+  * **延迟写入（Lazy Write）**：当用户在调试器中修改寄存器（如 `set $r0 = 5`）时，OpenOCD 仅更新 `reg_cache` 并将 `dirty` 标志设为 true。直到执行 `resume` 恢复运行前，才一次性刷入硬件。
+  * **核心寄存器读取路径**：
+  * 在 **ARM Cortex-M** 上：CPU 挂起后，OpenOCD 通过 NVIC 调试组件中的 **DCRSR**（Debug Core Register Selector Register）写入寄存器编号，再从 **DCRDR**（Debug Core Register Data Register）中读取值。
+  * 在 **RISC-V** 上：通过 Abstract Control and Status (abstractcs) / Abstract Commands 寄存器执行 `Access Register` 命令读取。
+  
+  外设映射与总线级寄存器读写（SFR / MMIO）
+  
+  对于 MCU 的外设控制寄存器（如 RCC、GPIO、UART 等），OpenOCD 采用 **内存映射 I/O (MMIO)** 模型。由于外设寄存器本质上都映射在 CPU 的物理地址空间中，OpenOCD 并不在 C 语言层硬编码每个 MCU 的每个外设寄存器，而是将其归一化为统一的内存总线访问。
+  
+  读写访问流
+  
+  当调试器发送读写外设寄存器的请求（例如读取 STM32 的 GPIOA\_ODR `0x48000014`）时：
+  
+  1. **GDB 协议解析**：GDB 发送 `m` (Read Memory) 或 `M` (Write Memory) 数据包。
+  2. **Target 层路由**：OpenOCD 将请求转发给 `target->type->read_memory()`。
+  3. **调试接口协议转换**：
+   * **ARM 架构**：调用 ADI (ARM Debug Interface) v5/v6 驱动，通过 DP (Debug Port) 选择 AP (Access Port，如 AHB-AP / AXI-AP)，生成标准总线读写传输。
+   * **RISC-V 架构**：通过 System Bus Access (SBA) 模块或通过在 Target 上注入执行数据传输指令来完成总线读写。
+  4. **硬件响应**：调试器硬件（J-Link / ST-Link / CMSIS-DAP）将请求转换为 SWD 或 JTAG 物理时序，打入 MCU 总线并返回结果。
+  
+  外设寄存器的定义与可视化（SVD 支持）
+  
+  虽然 OpenOCD 内核仅处理地址与数据，但为了在 CLI 或 GDB 中直观显示外设寄存器，OpenOCD 提供了对 CMSIS-SVD（System View Description）文件的映射解析能力：
+  
+  * **SVD 解析**：用户可以在 OpenOCD TCL 配置或前端（如 Cortex-Debug 插件）中装载 MCU 的 `.svd` 文件。
+  * **结构化映射**：SVD 文件建立了 `外设名称 -> 基地址 -> 寄存器偏移 -> 位域 (Bitfield)` 的映射表。
+  * **交互实现**：当用户请求查看 `GPIOA->ODR` 时，系统自动完成 `0x48000000 + 0x14` 的地址计算，发起 `read_memory()` 获得 32-bit 数据后，再依据 Bitfield 定义解析并打印掩码位。
+- ### 3.1.3. 经典响应控制流
+- #### 3.1.3.1. 典型的控制响应流：以 Halt（强制暂停 CPU）为例
+  
+  当调试器或用户发出 `halt` 指令时，OpenOCD 的底层交互步骤如下：
+  
+  ```
+  [User/GDB] -> (发送 'interrupt' 或 'halt')
+    │
+    ▼
+  [target.c] -> target_halt(struct target *target)
+    │  (调用虚函数)
+    ▼
+  [cortex_m.c] -> cortex_m_halt(struct target *target)
+    │
+    ├─► 1. 读取 NVIC 中的 DHCSR (Debug Halting Control and Status Register)
+    │
+    ├─► 2. 向 DHCSR 写入 Debug Key (0xA05F) | C_HALT | C_DEBUGEN
+    │      └─► 发起 DAP 总线传输写寄存器 `0xE000EDF0`
+    │
+    └─► 3. 循环调用 poll()，直至 DHCSR 的 S_HALT 位置 1
+  ```
+- #### 3.1.3.2. 寄存器读写与同步逻辑（三阶段）
+  
+  阶段 1：内核被挂起 (Halted)
+  
+  当目标内核进入 `TARGET_HALTED` 状态时，OpenOCD **不会** 立即拉取所有寄存器的值，而是将所有寄存器的 `valid` 和 `dirty` 标志置为 `false`。
+  
+  阶段 2：读取与修改 (GDB 交互)
+  
+  * **读取（****`get_reg`****）**：
+  * 检查 `reg->valid`。若为 `true`，直接返回 `reg->value`。
+  * 若为 `false`，触发 `reg->type->get()`（如 `armv7m_get_core_reg()`）。
+  * 从硬件读取值写入 `reg->value`，并设置 `valid = true`。
+  * **写入（****`set_reg`****）**：
+  * 更新 `reg->value` 的内容。
+  * 将 `reg->valid` 置为 `true`，**`reg->dirty`****&#x20;置为&#x20;****`true`**。此时不立刻写入硬件。
+  
+  阶段 3：恢复运行 (Resume)
+  
+  在内核重新恢复运行（`target_resume`）前，OpenOCD 会遍历整个 `reg_cache`：
+  
+  ```
+  遍历 reg_cache 中所有的 reg:
+  └── 如果 reg->dirty == true:
+        ├── 调用 reg->type->set() 将本地 value 写入 CPU 硬件
+        └── 重置 reg->dirty = false
+  ```
+- #### 3.1.3.3. Cortex-M 与 RISC-V 核心寄存器读写硬件细节
+  
+  由于 CPU 暂停时无法执行普通 `MOV` 或 `LD` 指令，OpenOCD 需要使用硬件调试模块的特殊通路来读取核心寄存器：
+  
+  * **ARM Cortex-M (通过 CoreDebug 单元)**：
+  * 读 R0\~R15、xPSR：写寄存器编号到 `DCRSR` (0xE000EDF4)，触发硬件搬运，然后从 `DCRDR` (0xE000EDF8) 读取 32 位数值。
+  * 读 FPU 浮点寄存器（S0\~S31）：利用同样的 `DCRSR/DCRDR` 机制，配合特权选择码。
+  * **RISC-V (通过 Debug Module 抽象命令 Abstract Commands)**：
+  * 写寄存器选择码与 `Access Register` 命令到 `command` (0x17) 寄存器。
+  * 调试模块 (DM) 暂停 CPU 内部流水线，将目标寄存器的值放入 `data0` (0x04) 寄存器。
+  * OpenOCD 通过 JTAG/SWD 读取 `data0`。
+-
