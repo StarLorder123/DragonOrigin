@@ -1691,6 +1691,8 @@
   
   ARM ADI（Debug Interface Specification）规范定义了外部调试器与芯片内部 CoreSight 调试组件通信的架构。整体核心是由 **Debug Access Port (DAP)** 构成的两级分层访问机制：外部连接控制 **DP (Debug Port)**，再由 DP 路由控制多个 **AP (Access Port)** 访问芯片内部的总线与组件。
   
+    ![fN3UKUWuLLfosLrhB8zD5q8e0oaqRe-GT7JZa7ccMqQ=.png](../assets/fN3UKUWuLLfosLrhB8zD5q8e0oaqRe-GT7JZa7ccMqQ=_1791212594901_0.png)
+  
   **1. 架构分层职责**
   
   * **Debug Port (DP):** 负责处理外部物理协议（SWD、JTAG 或 ADIv6 中的 SWJ-DP/MIN-DP），提供对调试器本身控制寄存器（如上电、选择 AP）的直接访问。
@@ -1737,8 +1739,7 @@
   4. 读 `DRW`（触发 MEM-AP 向总线发起总线读，同时启动 DP 传输）。
   5. 读 `DP RDBUFF`（或连续读取下一个 `DRW`）获取真正从 `0x20000000` 读出的数据。
 - ## 2.2 RISCV DTM访问原理
-  
-  ![fN3UKUWuLLfosLrhB8zD5q8e0oaqRe-GT7JZa7ccMqQ=.png](../assets/fN3UKUWuLLfosLrhB8zD5q8e0oaqRe-GT7JZa7ccMqQ=_1791212594901_0.png)
+- ![33eZ23aY2v5XRXaoSWURRS103FlO5HPwmXkXDdXlbWA=.png](../assets/33eZ23aY2v5XRXaoSWURRS103FlO5HPwmXkXDdXlbWA=_1791213100569_0.png)
 - RISC-V 的核心访问链条可以概括为：**DTM (物理连接) ➔ DMI (内部总线) ➔ DM (控制核心) ➔ Hart (CPU核) / System Bus (内存)**。
 - ### 2.2.1. 核心架构组件及职责
   
