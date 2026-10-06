@@ -4416,3 +4416,109 @@
   ```
 - 主要的逻辑就在第13-15行。这里面就点明了这个渲染进程中会加载哪个文件。并且在加载之后，会执行该文件中的startup函数。因此，需要我们在定义这个文件的时候，在这个文件中一定需要定义一个startup函数，而且还要export出来。也就意味着startup函数就是这个渲染进程的主函数。configuration参数就是这个主函数的参数。需要与issueReporterWindowConfigUrl参数对应起来。
 - 在对应的startup中就可以添加对应的事件添加，事件响应相关的函数。
+- # 9.  VSCode插件开发实践
+- ## 9.1.  第一个插件
+  
+  在开始开发VSCode之前，需要安装Nodejs。Nodejs的安装在Windows上比较简单，只需要从官网上下载安装。
+  
+  Nodejs中文官网：[https://nodejs.org/zh-cn](https://nodejs.org/zh-cn)
+- 在安装完nodejs之后，需要安装yeoman和vscode generator这两个模块
+  
+  ```
+  npm install -g yo generator-code
+  ```
+- 然后新建一个文件夹，输入以下命令构建一个默认的项目
+  
+  ```
+  yo code
+  
+  # ? What type of extension do you want to create? New Extension (TypeScript)
+  # ? What's the name of your extension? HelloWorld
+  ### Press <Enter> to choose default for all options below ###
+  
+  # ? What's the identifier of your extension? helloworld
+  # ? What's the description of your extension? LEAVE BLANK
+  # ? Initialize a git repository? Yes
+  # ? Bundle the source code with webpack? No
+  # ? Which package manager to use? npm
+  
+  # ? Do you want to open the new folder with Visual Studio Code? Open with `code`
+  ```
+- 然后用vscode打开这个项目，按**F5**进入调试。
+- 使用 **Ctrl+Shift+P **命令打开命令行。输入 **Hello World **，点击就可以看到效果。
+- 注意：如果在创建项目时，出现了以下问题。可以通过使用管理员权限在shell中输入  **set-ExecutionPolicy RemoteSigned **来解决问题。
+  
+  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1695225724102-2942f4fc-dcb4-410e-a66f-6d94bf998bef.png)
+- ## 9.2.  使用React开发WebView
+- React相关的框架说白了其实就是将虚拟DOM转化为真实DOM的一系列的js文件。因此，如果想要将react引入到vscode插件中去，需要做两步：第一步，开发一个React的前端项目，主要处理前端的节点和路由相关的内容。第二步，将入口文件作为一个地址传给前端的页面。
+- 可以设置一个Provider，一个页面的tsx。
+- ```
+  let webviewPanel;
+  
+  export function initCommon(context: vscode.ExtensionContext) {
+  
+    if (webviewPanel) {
+      webviewPanel.dispose();
+    }
+  
+    webviewPanel = vscode.window.createWebviewPanel(
+      'React',
+      '团队协作',
+      vscode.ViewColumn.One,
+      {
+        retainContextWhenHidden: true, // 保证 Webview 所在页面进入后台时不被释放
+        enableScripts: true // 运行 JS 执行
+      }
+    );
+  
+    const filePath = vscode.Uri.file(
+      path.join(context.extensionPath, 'out', 'common.js')
+    );
+    const srcUrl = webviewPanel.webview.asWebviewUri(filePath).toString();
+    // webview->extension
+    webviewPanel.webview.onDidReceiveMessage(
+      // 监听从后端返回的信息
+      ()=>{}, null
+    )
+    webviewPanel.webview.html = getWebviewContent(srcUrl);
+    webviewPanel.onDidDispose(() => {
+      // When the panel is closed, dispose of the currentPanel variable
+      webviewPanel = undefined;
+    });
+  }
+  
+  // extension->webview
+  export function postMessageToCommon(message: any) {
+    webviewPanel.webview.postMessage(message);
+  }
+  
+  function getWebviewContent(srcUri: string) {
+    return `<!doctype html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>webview-react</title>
+        <script defer="defer" src="${srcUri}"></script>
+      </head>
+      <body>
+      <script>    const vscode = acquireVsCodeApi();</script>
+        <div id="root"></div>
+      </body>
+      </html>`;
+  }
+  ```
+  
+  ```
+  import React from 'react'
+  
+  function Common() {
+    return (
+      <div>Common</div>
+    )
+  }
+  
+  export default Common
+  ```
+- 这里我还使用了webpack，将一系列的tsx转化为一个js。这里需要将extension和webview的代码分开，不能混淆在一起，因为两者的环境是不一样的。
+-

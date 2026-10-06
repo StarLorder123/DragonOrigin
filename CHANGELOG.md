@@ -18,6 +18,7 @@
 - Add gulp build tool note (`pages/gulp构建工具.md`) covering Vinyl/tasks/globs and VSCode win32 packaging
 - Add repository README (`README.md`)
 - Add daily journal entry for 2026-09-06 (`journals/2026_09_06.md`)
+- Add VSCode extension development practice notes (`pages/VSCode解析.md`) covering the first-plugin workflow (`yo code` generator, F5 debugging, Hello World command), and developing a React-based WebView (`createWebviewPanel`, `asWebviewUri`, `acquireVsCodeApi`, and the extension↔webview `onDidReceiveMessage`/`postMessage` bridge)
 
 ### Changed
 
