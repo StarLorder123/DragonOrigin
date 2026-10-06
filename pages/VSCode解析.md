@@ -4204,3 +4204,215 @@
 - ## 7.5.  小结
 - 从明白和理解VSCode的打包过程可以看出来，VSCODE的设计是相当紧凑和精巧的。通过不同的gulp打包任务的组合，可以打出vscode的web、windows、linux、macos版。从形式上来说，基本上兼顾了所有的编辑器的场景，并且结合SSH现成的技术，实现了远端操作项目的目的。
 - 理解vscode也可以从打包开始，找到每种形式的开端，也是可以慢慢花时间去理解vscode的源码结构。
+- # 8.  VSCode关键代码解析
+- ## 8.1.  共享进程
+- Shared Process的启动是通过闭包实现的。在入口的app.ts中有一段这样的代码
+  
+  ```
+  // Shared process
+  // 共享进程的启动准备和客户端相关的函数方法
+  const { sharedProcessReady, sharedProcessClient } = this.setupSharedProcess(machineId, sqmId);
+  ```
+- 上述代码就是共享进程的启动准备和客户端相关的方法。
+- 共享进程的具体创建方法如下：
+  
+  ```
+  private setupSharedProcess(machineId: string, sqmId: string): { sharedProcessReady: Promise<MessagePortClient>; sharedProcessClient: Promise<MessagePortClient> } {
+  // 构建一个共享进程，并且在共享进程中构建一个IPCServer
+  const sharedProcess = this._register(this.mainInstantiationService.createInstance(SharedProcess, machineId, sqmId));
+  
+  const sharedProcessClient = (async () => {
+  	this.logService.trace('Main->SharedProcess#connect');
+  
+  	// 链接共享进程
+  	// 返回的是一个electron的原生对象MessagePortMain
+  	const port = await sharedProcess.connect();
+  
+  	this.logService.trace('Main->SharedProcess#connect: connection established');
+  
+  	return new MessagePortClient(port, 'main');
+  })();
+  
+  const sharedProcessReady = (async () => {
+  	await sharedProcess.whenReady();
+  
+  	return sharedProcessClient;
+  })();
+  
+  return { sharedProcessReady, sharedProcessClient };
+  }
+  ```
+	- 上面的代码主要就是两个功能，一个就是返回一个共享进程的客户端，也就是可以和共享进程进行通信的通信桥对象；另外一个就是等待共享进程准备好了之后，就返回上述客户端的功能。
+	- 可以看到上述代码中，还有一个whenReady的方法，这个方法的具体内容为：
+- ## 8.2.  渲染进程加载页面
+- 在 5.3 节中讲述了vscode进程架构。这一小节主要讲述渲染进程是如何加载出对应页面的。
+- 在源码中，一般会使用createBrowserWindow这个electron的api来创建渲染进程。也仅有electron-main进程可以创建渲染进程（render process）。
+- 例如：issueExplore渲染进程的创建
+  
+  ```
+  const issueReporterDisposables = new DisposableStore();
+  
+  		const issueReporterWindowConfigUrl = issueReporterDisposables.add(this.protocolMainService.createIPCObjectUrl<IssueReporterWindowConfiguration>());
+  		const position = this.getWindowPosition(this.issueReporterParentWindow, 700, 800);
+  
+  		this.issueReporterWindow = this.createBrowserWindow(position, issueReporterWindowConfigUrl, {
+  			backgroundColor: data.styles.backgroundColor,
+  			title: localize('issueReporter', "Issue Reporter"),
+  			zoomLevel: data.zoomLevel,
+  			alwaysOnTop: false
+  		}, 'issue-reporter');
+  
+  		// Store into config object URL
+  		issueReporterWindowConfigUrl.update({
+  			appRoot: this.environmentMainService.appRoot,
+  			windowId: this.issueReporterWindow.id,
+  			userEnv: this.userEnv,
+  			data,
+  			disableExtensions: !!this.environmentMainService.disableExtensions,
+  			os: {
+  				type: type(),
+  				arch: arch(),
+  				release: release(),
+  			},
+  			product
+  		});
+  		this.issueReporterWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+  			callback({ responseHeaders: { ...details.responseHeaders, 'Access-Control-Allow-Headers': ['Cookie', 'Content-Type'], 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Origin': ['vscode-file://vscode-app'] } })
+  		});
+  		this.issueReporterWindow.webContents.session.webRequest.onBeforeSendHeaders(
+  			(details, callback) => {
+  				callback({ requestHeaders: { Origin: '*', ...details.requestHeaders } });
+  			},
+  		);
+  		//this.issueReporterWindow.webContents.session.webRequest
+  		this.issueReporterWindow.loadURL(
+  			FileAccess.asBrowserUri(`vs/code/electron-sandbox/issue/issueReporter${this.environmentMainService.isBuilt ? '' : '-dev'}.html`).toString(true)
+  		);
+  
+  		this.issueReporterWindow.on('close', () => {
+  			this.issueReporterWindow = null;
+  
+  			issueReporterDisposables.dispose();
+  		});
+  
+  		this.issueReporterParentWindow.on('closed', () => {
+  			if (this.issueReporterWindow) {
+  				this.issueReporterWindow.close();
+  				this.issueReporterWindow = null;
+  
+  				issueReporterDisposables.dispose();
+  			}
+  		});
+  ```
+- 其中，createBrowserWindow是创建渲染进程的具体操作方法。这里面确定了该进程的一些基本配置参数。
+- issueReporterWindowConfigUrl参数存放了初始化的配置参数。
+- 真正开始加载的方法是loadURL
+- loadURL方法中填入的参数是将一个html文件作为浏览器文件放入到window中。
+- 接下来看一下上述例子中导入的html
+  
+  ```
+  <!-- Copyright (C) Microsoft Corporation. All rights reserved. -->
+  <!DOCTYPE html>
+  <html>
+  <head>
+  <meta charset="utf-8" />
+  <!-- <meta
+  	http-equiv="Content-Security-Policy"
+  	content="
+  		default-src
+  			'none'
+  		;
+  		img-src
+  			'self'
+  			data:
+  		;
+  		script-src
+  			'self'
+  		;
+  		style-src
+  			'self'
+  			'unsafe-inline'
+  		;
+  		connect-src
+  			'self'
+  			https:
+  		;
+  		font-src
+  			'self'
+  		;
+  "> -->
+  <style>
+  	body {
+  		display: none
+  	}
+  </style>
+  </head>
+  
+  <body aria-label="">
+  </body>
+  
+  <!-- Startup (do not modify order of script tags!) -->
+  <script src="issueReporter.js"></script>
+  </html>
+  ```
+- 这是一个正式环境（生产环境）下的html。还有一个是dev环境下（开发环境）下的html。两者之间差了以下的几行。
+  
+  ```
+  <script src="../../../../bootstrap.js"></script>
+  <script src="../../../../vs/loader.js"></script>
+  <script src="../../../../bootstrap-window.js"></script>
+  ```
+- 这几个文件会在打包的时候，打包成一个文件。即生产环境中的那个js文件。但是在调试环境下，还是需要引入上面的几个文件，因为这是vscode的一种开发规范。
+- 再看一下，对应的js文件中的内容
+  
+  ```
+  /*---------------------------------------------------------------------------------------------
+  *  Copyright (c) Microsoft Corporation. All rights reserved.
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+  
+  //@ts-check
+  (function () {
+  'use strict';
+  
+  const bootstrapWindow = bootstrapWindowLib();
+  
+  // Load issue reporter into window
+  bootstrapWindow.load(['vs/code/electron-sandbox/issue/issueReporterMain'], function (issueReporter, configuration) {
+  return issueReporter.startup(configuration);
+  },
+  {
+  	configureDeveloperSettings: function () {
+  		return {
+  			forceEnableDeveloperKeybindings: true,
+  			disallowReloadKeybinding: true
+  		};
+  	}
+  }
+  );
+  
+  /**
+  * @typedef {import('../../../base/parts/sandbox/common/sandboxTypes').ISandboxConfiguration} ISandboxConfiguration
+  *
+  * @returns {{
+  *   load: (
+  *     modules: string[],
+  *     resultCallback: (result, configuration: ISandboxConfiguration) => unknown,
+  *     options?: {
+  *       configureDeveloperSettings?: (config: ISandboxConfiguration) => {
+  * 			forceEnableDeveloperKeybindings?: boolean,
+  * 			disallowReloadKeybinding?: boolean,
+  * 			removeDeveloperKeybindingsAfterLoad?: boolean
+  * 		 }
+  *     }
+  *   ) => Promise<unknown>
+  * }}
+  */
+  function bootstrapWindowLib() {
+  // @ts-ignore (defined in bootstrap-window.js)
+  return window.MonacoBootstrapWindow;
+  }
+  }());
+  ```
+- 主要的逻辑就在第13-15行。这里面就点明了这个渲染进程中会加载哪个文件。并且在加载之后，会执行该文件中的startup函数。因此，需要我们在定义这个文件的时候，在这个文件中一定需要定义一个startup函数，而且还要export出来。也就意味着startup函数就是这个渲染进程的主函数。configuration参数就是这个主函数的参数。需要与issueReporterWindowConfigUrl参数对应起来。
+- 在对应的startup中就可以添加对应的事件添加，事件响应相关的函数。
