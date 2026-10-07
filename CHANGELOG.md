@@ -19,6 +19,7 @@
 - Add repository README (`README.md`)
 - Add daily journal entry for 2026-09-06 (`journals/2026_09_06.md`)
 - Add VSCode extension development practice notes (`pages/VSCode解析.md`) covering the first-plugin workflow (`yo code` generator, F5 debugging, Hello World command), and developing a React-based WebView (`createWebviewPanel`, `asWebviewUri`, `acquireVsCodeApi`, and the extension↔webview `onDidReceiveMessage`/`postMessage` bridge)
+- Add OpenOCD reset and in-RAM Flash algorithm notes (`pages/嵌入式IDE可观测性.md`) covering SRST/TRST signals and `reset_config` dimensions, Cortex-M reset modes (srst/sysresetreq/vectreset), `reset run/halt/init` semantics, the reset event chain and timing parameters, the `reset halt` timing race and vector-catch mechanism, and the "Algorithm in RAM" Flash programming model (working area, loader image, parameter block, sync/async loaders, register-level STM32 FPEC example, degradation paths)
 
 ### Changed
 
