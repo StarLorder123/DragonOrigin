@@ -4521,4 +4521,345 @@
   export default Common
   ```
 - 这里我还使用了webpack，将一系列的tsx转化为一个js。这里需要将extension和webview的代码分开，不能混淆在一起，因为两者的环境是不一样的。
+- ## 9.3.  Hover使用方法
+- 具体的参考可以查看vscode api中的registerHoverProvider方法。
+- [https://code.visualstudio.com/api/references/vscode-api#languages](https://code.visualstudio.com/api/references/vscode-api#languages)
+- 这里主要讲的就是关于如何在hover中向调用的command传递参数。
+- 添加一个接口来定义args的形状
+  
+  ```
+  interface ISayHelloArgs {
+  msg: string;
+  }
+  ```
+- 然后，注册命令使用这个接口(您得到一个对象'args')
+  
+  ```
+  context.subscriptions.push(
+    vscode.commands.registerCommand("say_hello", async (args: ISayHelloArgs) => {
+      vscode.window.showInformationMessage(args.msg + ' greetz at ' + new Date());
+    })
+  );
+  ```
+- 注册的HoverProvider然后使用JSON字符串的encodeURI版本构建args。
+  
+  ```
+  vscode.languages.registerHoverProvider(selector, {
+    provideHover(
+      doc: vscode.TextDocument,
+      pos: vscode.Position,
+      token: vscode.CancellationToken
+    ): vscode.ProviderResult<vscode.Hover> {
+      return new Promise<vscode.Hover>((resolve, reject) => {
+        const args: ISayHelloArgs = { msg: 'hello' };
+        const jsonArgs = JSON.stringify(args);
+        const hoverMarkup = `[Greetings...](command:say_hello?${encodeURI(jsonArgs)})`;
+        if (hoverMarkup) {
+          const mdstring = new vscode.MarkdownString(hoverMarkup);
+          mdstring.isTrusted = true; // NOTE: this is needed to execute commands!!
+          resolve(new vscode.Hover(mdstring));
+        } else {
+          reject();
+        }
+      }
+      );
+    },
+  });
+  ```
+- 其中provideHover方法中的几个函数，分别就是代表了document文档对象，position光标位置以及取消的Token。
+- ## 9.4.  CodeLens的使用
+- CodeLens就是在editor上会在正式的文本中间出现一些类似提示词一样的内容。
+- CodeLens主要可以通过implements vscode的CodeLensProvider来实现。
+  
+  ```
+  class TestLensProvider implements vscode.CodeLensProvider {
+  
+    private readonly RUN_TEST_LENS_TITLE = '$(run) Run Test With Coverage';
+  
+    private map: Map<string, vscode.CodeLens[]> = new Map<string, vscode.CodeLens[]>();
+  
+      private createCodeLens(lineNumber: number): vscode.CodeLens {
+        const codeLens = new vscode.CodeLens(new vscode.Range(lineNumber, 0, lineNumber + 1, 0));
+        codeLens.command = {
+            title: this.RUN_TEST_LENS_TITLE,
+            command: '',
+            arguments: []
+        };
+        return codeLens;
+    }
+  
+    // vscode.CodeLensProvider 接口必须要实现的方法
+    provideCodeLenses(document: vscode.TextDocument, token: vscode.CancellationToken): vscode.CodeLens[] | Thenable<vscode.CodeLens[]> {
+        return new Promise<vscode.CodeLens[]>((resolve) => {
+            // document.fileName是绝对路径地址
+            let filename = document.fileName;
+            resolve(this.map.get(filename) ?? []);
+        });
+    }
+  
+  }
+  ```
+- 上述代码中的$(run)部分，在渲染的时候，就会被渲染成一个启动一样的小图标。如果注册的CodeLens中，command部分的命令没有被注册，那么这个就不会被启动命令执行。
+- ## 9.5.  DecorationType的使用
+- DecorationType的运用很简单，直接可以通过editor的setDecoration就可以使用。
+- DecorationType可以被称为是editor上的样式渲染。可以对editor上的任何一个位置进行样式上的改变和装饰。
+- 如果我想要为某个段落加个装饰，可以通过以下的代码来实现：
+  
+  ```
+  currentFileEditor.setDecorations(this.stateDecorationTypes.passed, passedRanges);
+  ```
+	- 这个方法的第一个参数就是装饰样式的定义，是一个vscode.TextEditorDecorationType类，第二个参数是一个vscode.Range的数组。
+- 如果我想让对应的样式消失，可以通过以下代码来实现：
+  
+  ```
+  currentFileEditor.setDecorations(this.stateDecorationTypes.passed, []);
+  ```
+- # 10.  其他设计实践
+- ## 10.1.  Web Shell/Remote Shell设计
+  
+  [Web Shell的设计与实现](https://www.yuque.com/lijinhao-tk9dv/rhf8aa/oown2tpcmbyk0voz)
+- ## 10.2.  Open VSX
+- Open VSX是一个供应商中立的开源替代品,用于Visual Studio Marketplace。它提供了一个管理VS Code扩展的服务器应用程序、一个类似于VS Code Marketplace的Web应用程序,以及一个类似于vsce的用于发布扩展的命令行工具。官方链接：[https://open-vsx.org/](https://open-vsx.org/)
+  
+  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1729221674600-6c9d95fb-176c-4947-80ae-974c7f21c774.png)
+- 最大的作用就是用于代替微软的vscode插件市场。也可以做私有部署。
+- ### 10.2.1.  部署
+- 部署使用的docker部署的。直接使用docker-compose进行部署就可以了。
+- docker-compose.yaml
+  
+  ```
+  version: '3.8'
+  
+  services:
+  
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: openvsx
+      POSTGRES_PASSWORD: openvsx
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+    ports:
+      - '5432:5432'
+  
+  elasticsearch:
+    image: elasticsearch:8.7.1
+    environment:
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    ports:
+      - 9200:9200
+      - 9300:9300
+    healthcheck:
+      test: curl -s http://elasticsearch:9200 >/dev/null || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 50
+      start_period: 5s
+  
+  kibana:
+    image: kibana:8.7.1
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    profiles:
+      - kibana
+  
+  server:
+    image: openjdk:17
+    working_dir: /app
+    command: sh -c 'scripts/generate-properties.sh --docker && ./gradlew assemble && ./gradlew runServer'
+    volumes:
+      - ./server:/app
+    ports:
+      - 8080:8080
+    depends_on:
+      - postgres
+      - elasticsearch
+    healthcheck:
+      test: "curl --fail --silent localhost:8081/actuator/health | grep UP || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 50
+      start_period: 5s
+    profiles:
+      - openvsx
+      - backend
+  
+  webui:
+    image: node:18
+    working_dir: /app
+    command: sh -c 'yarn && yarn build && yarn build:default && yarn start:default'
+    volumes:
+      - ./webui:/app
+    ports:
+      - 3000:3000
+    depends_on:
+      - server
+    profiles:
+      - openvsx
+      - frontend
+  
+  cli:
+    image: node:18
+    working_dir: /app
+    command: sh -c 'yarn && yarn watch'
+    volumes:
+      - ./cli:/app
+    depends_on:
+      - server
+    environment:
+      - OVSX_REGISTRY_URL=http://server:8080
+    profiles:
+      - openvsx
+      - commandline
+  ```
+- 然后使用某个命令启动Docker服务
+  
+  ```
+  docker compose --profile openvsx --profile kibana up
+  ```
+- 因为openvsx需要用到https，所以会涉及到证书的问题。
+- 如果是自己内部使用或者测试，可以生成一个自签名证书，然后在nginx中添加该证书。
+  
+  ```
+  docker run --rm -it -e CERT_DNS="192.168.23.181" -v $(pwd)/certs:/ssl soulteary/certs-maker
+  ```
+- 将证书复制到nginx配置目录里：
+  
+  ```
+  sudo mkdir -p /etc/nginx/ssl
+  sudo cp $(pwd)/certs/192.168.23.181.crt /etc/nginx/ssl/
+  sudo cp $(pwd)/certs/192.168.23.181.key /etc/nginx/ssl/
+  ```
+- 配置Nginx
+	- 注：下面的192.168.23.181地址是示例地址，需要切换成真正部署的地址。
+	- 创建和编辑站点配置
+	  
+	  ```
+	  sudo nano /etc/nginx/sites-available/openvsx
+	  ```
+	- 配置文件
+	  
+	  ```
+	  # 处理端口 80 上的 HTTP 请求
+	  server {
+	   listen 80;
+	   server_name 192.168.23.181;
+	  
+	   # 将所有 HTTP 请求重定向到 HTTPS
+	   location / {
+	       return 301 https://$host$request_uri;
+	   }
+	  }
+	  
+	  # 处理端口 443 上的 HTTPS 请求
+	  server {
+	   listen 443 ssl;
+	   server_name 192.168.23.181;
+	  
+	   ssl_certificate /etc/nginx/ssl/192.168.23.181.crt;
+	   ssl_certificate_key /etc/nginx/ssl/192.168.23.181.key;
+	   ssl_protocols TLSv1.2 TLSv1.3;
+	   ssl_prefer_server_ciphers on;
+	  
+	   location / {
+	       proxy_pass http://192.168.23.181:8082;
+	       proxy_set_header Host $host;
+	       proxy_set_header X-Forwarded-Host $host;
+	       proxy_set_header X-Real-IP $remote_addr;
+	       proxy_set_header X-Forwarded-Proto $scheme;
+	   }
+	  }
+	  ```
+	- 创建符号链接并重新加载Nginx
+	  
+	  ```
+	  sudo ln -s /etc/nginx/sites-available/openvsx /etc/nginx/sites-enabled/
+	  sudo nginx -t
+	  sudo systemctl reload nginx
+	  ```
+	- 检查和更新配置
+	  
+	  ```
+	  sudo grep -r '192.168.23.181' /etc/nginx/
+	  sudo mv /etc/nginx/sites-available/192.168.23.181.conf /etc/nginx/sites-available/192.168.23.181.conf.disabled
+	  sudo rm /etc/nginx/sites-enabled/192.168.23.181.conf
+	  sudo ln -s /etc/nginx/sites-available/openvsx /etc/nginx/sites-enabled/
+	  sudo nginx -t
+	  sudo systemctl reload nginx
+	  ```
+	- 测试上传插件
+	  
+	  ```
+	  docker compose exec cli yarn load-extensions n
+	  ```
+- ### 10.2.2.  发布插件
+- 检查ovsx版本
+  
+  ```
+  ovsx --version
+  ```
+- 启动服务并发布插件
+  
+  ```
+  docker ps
+  export OVSX_REGISTRY_URL=http://localhost:8080
+  export OVSX_PAT=super_token
+  export PUBLISHERS="DotJoshJohnson eamodio felixfbecker formulahendry HookyQR ms-azuretools ms-mssql ms-python ms-vscode octref redhat ritwickdey sburg vscode vscodevim Wscats"
+  
+  for pub in $PUBLISHERS; do
+    cli/lib/ovsx create-namespace $pub
+  done
+  
+  export OVSX_REGISTRY_URL=http://localhost:8080
+  export OVSX_PAT=super_token
+  
+  npx ovsx create-namespace redhat
+  export OVSX_REGISTRY_URL=http://localhost:8082
+  npx ovsx create-namespace red
+  npx ovsx publish redhat.vscode-yaml-0.10.1.vsix
+  ```
+- ### 10.2.3.  配置vscode
+- 直接修改vscode应用程序下的product.json的内容就可以连上。
+  
+  ```
+  {
+  "extensionsGallery": {
+    "nlsBaseUrl": "https://www.vscode-unpkg.net/_lp/",
+    "serviceUrl": "https://192.168.23.181:443/vscode/gallery",
+    "itemUrl": "https://192.168.23.181:443/vscode/item",
+    "publisherUrl": "https://marketplace.visualstudio.com/publishers",
+    "resourceUrlTemplate": "https://{publisher}.vscode-unpkg.net/{publisher}/{name}/{version}/{path}",
+    "controlUrl": "https://az764295.vo.msecnd.net/extensions/marketplace.json"
+  },
+  "linkProtectionTrustedDomains": [
+    "https://*.visualstudio.com",
+    "https://*.microsoft.com",
+    "https://aka.ms",
+    "https://*.gallerycdn.vsassets.io",
+    "https://*.github.com",
+    "https://login.microsoftonline.com",
+    "https://*.vscode.dev",
+    "https://*.github.dev",
+    "https://gh.io",
+    "https://portal.azure.com",
+    "https://raw.githubusercontent.com",
+    "https://private-user-images.githubusercontent.com",
+    "https://avatars.githubusercontent.com",
+    "https://192.168.23.181"
+  ]
+  }
+  ```
+- ### 10.2.4.  参考资料
+  
+  openvsx官方github地址：[https://github.com/eclipse/openvsx](https://github.com/eclipse/openvsx)
 -
