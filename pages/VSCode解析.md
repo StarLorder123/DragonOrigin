@@ -4616,8 +4616,7 @@
   ```
 - # 10.  其他设计实践
 - ## 10.1.  Web Shell/Remote Shell设计
-  
-  [Web Shell的设计与实现](https://www.yuque.com/lijinhao-tk9dv/rhf8aa/oown2tpcmbyk0voz)
+- [[Web Shell的设计与实现]]
 - ## 10.2.  Open VSX
 - Open VSX是一个供应商中立的开源替代品,用于Visual Studio Marketplace。它提供了一个管理VS Code扩展的服务器应用程序、一个类似于VS Code Marketplace的Web应用程序,以及一个类似于vsce的用于发布扩展的命令行工具。官方链接：[https://open-vsx.org/](https://open-vsx.org/)
   
