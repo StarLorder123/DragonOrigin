@@ -22,6 +22,7 @@
 - Add OpenOCD reset and in-RAM Flash algorithm notes (`pages/嵌入式IDE可观测性.md`) covering SRST/TRST signals and `reset_config` dimensions, Cortex-M reset modes (srst/sysresetreq/vectreset), `reset run/halt/init` semantics, the reset event chain and timing parameters, the `reset halt` timing race and vector-catch mechanism, and the "Algorithm in RAM" Flash programming model (working area, loader image, parameter block, sync/async loaders, register-level STM32 FPEC example, degradation paths)
 - Add VSCode editor-extension notes (`pages/VSCode解析.md`) covering Hover providers with command-argument passing, CodeLens providers, TextEditorDecorationType, and design-practice chapters on Web Shell/Remote Shell and Open VSX (deployment, publishing, and `product.json` configuration)
 - Add Web Shell design and implementation notes (`pages/Web Shell的设计与实现.md`) covering the two-process architecture (a V8 render environment and a Node.js server environment bridged over WebSocket/IPC), the render-side shell (xterm.js terminal, `WebLinksAddon`/`FitAddon`, key and message event wiring), and the server-side shell (`ssh2` client with SFTP binding, shell stream data/error/close/exit handling); link it from `pages/VSCode解析.md` as a wikilink
+- Add software design principles notes (`pages/软件设计原则.md`) covering the six OO design principles — Open/Closed, Dependency Inversion, Liskov Substitution, Interface Segregation, Demeter (Law of Least Knowledge), and Composite Reuse — each with a Java code example
 
 ### Changed
 
