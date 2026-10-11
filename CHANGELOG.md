@@ -23,6 +23,7 @@
 - Add VSCode editor-extension notes (`pages/VSCode解析.md`) covering Hover providers with command-argument passing, CodeLens providers, TextEditorDecorationType, and design-practice chapters on Web Shell/Remote Shell and Open VSX (deployment, publishing, and `product.json` configuration)
 - Add Web Shell design and implementation notes (`pages/Web Shell的设计与实现.md`) covering the two-process architecture (a V8 render environment and a Node.js server environment bridged over WebSocket/IPC), the render-side shell (xterm.js terminal, `WebLinksAddon`/`FitAddon`, key and message event wiring), and the server-side shell (`ssh2` client with SFTP binding, shell stream data/error/close/exit handling); link it from `pages/VSCode解析.md` as a wikilink
 - Add software design principles notes (`pages/软件设计原则.md`) covering the six OO design principles — Open/Closed, Dependency Inversion, Liskov Substitution, Interface Segregation, Demeter (Law of Least Knowledge), and Composite Reuse — each with a Java code example
+- Add VSCode debug-configuration notes (`pages/VSCode调试配置.md`) covering `launch.json` structure and fields, creating/configuring debug sessions, and example configurations for Node.js, Python, Java, C#, web, and client-server debugging scenarios
 
 ### Changed
 
