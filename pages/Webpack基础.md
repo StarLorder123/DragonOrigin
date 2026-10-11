@@ -1,7 +1,7 @@
 - webpack本身是, node的一个第三方模块包, 用于打包代码
 - 现代 javascript 应用程序的 **静态模块打包器 (module bundler)**
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1703671686397-b1bb9908-cd1b-4f7d-8f86-f9eb7615a8e5.png)
+  ![](../assets/Webpack基础/001_1703671686397-b1bb9908-cd1b-4f7d-8f86-f9eb7615a8e5.png)
 - ## 1.  安装Webpack
 - 安装依赖包
   
@@ -37,7 +37,7 @@
   ```
 - ### 2.2.  打包流程
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1703671938483-a1c21966-8d2d-41c1-9922-9b353d599c3b.png)
+  ![](../assets/Webpack基础/002_1703671938483-a1c21966-8d2d-41c1-9922-9b353d599c3b.png)
 - 重点: 所有要被打包的资源都要跟入口产生直接/间接的引用关系
 - 这里不一定需要使用yarn命令，也可以使用npm run命令
 - ### 2.3.  Mode模式

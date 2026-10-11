@@ -10,7 +10,7 @@
 	- 5. **check 阶段**: 执行 setImmediate() 设定的callbacks;
 	- 6. **close callbacks 阶段**: 比如 socket.on(‘close’, callback) 的callback会在这个阶段执行;
 	  
-	  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1697465395393-aa2fc50d-88fb-4011-809a-255258789990.png)
+	  ![](../assets/Nodejs事件循环机制/001_1697465395393-aa2fc50d-88fb-4011-809a-255258789990.png)
 - 在Node中，同样存在宏任务和微任务，与浏览器中的事件循环相似
 - 微任务对应有：
 	- next tick queue：process.nextTick

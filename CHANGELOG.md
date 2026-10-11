@@ -26,6 +26,7 @@
 
 ### Changed
 
+- Localize external CDN image references to local assets across 8 markdown pages (Electron基础, MarkDown编译错误, Nodejs服务环境搭建, TypeScript基础知识, VSCode解析, Webpack基础, 软件设计原则, 软件设计模式) — replace yuque.com CDN URLs with relative `../assets/` paths and add corresponding asset directories
 - Remove empty `pages/contents.md` (recycled by Logseq)
 
 ### Chore

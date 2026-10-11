@@ -1,7 +1,7 @@
 # 1.  VSCode简要介绍
 - ## 1.1.  简要介绍
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1695532980574-1471cc1e-b413-47a7-9487-163d6e481070.png)
+  ![](../assets/VSCode解析/001_1695532980574-1471cc1e-b413-47a7-9487-163d6e481070.png)
 - Visual Studio Code(简称VSCode) 是开源免费的IDE编辑器，原本是微软内部使用的云编辑器(Monaco)。
 - VSCode项目的负责人是Erich Gamma，也是曾经Eclipse的架构师，《设计模式》经典书籍的作者。他于2011年加入微软，在瑞士苏黎世组建团队开发基于Web技术的编辑器，也就是后来的Monaco-editor。从定位上来看，VSCode是一个大型的客户端APP项目。涉及的技术包含**Electron、TypeScript、Monaco、XTerm、LSP（Language Server Protocol）、DAP（Debug Adapter Protocol）。**
 - VSCode的时间线：
@@ -345,7 +345,7 @@
 	- 第一个是，接收端和发送端可能不止一个，因此我们需要一些信息做下区分，这个大家肯定很熟悉，可以用IP和端口。IP用来定位是哪台电脑，端口用来定位是这台电脑上的哪个进程。
 	- 第二个是，发送端和接收端的传输方式有很多区别，可以是可靠的TCP协议，也可以是不可靠的UDP协议，甚至还需要支持基于icmp协议的ping命令。
 	  
-	  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1728896433685-b7173605-0823-4baa-a5c1-e5a131619adc.png)
+	  ![](../assets/VSCode解析/002_1728896433685-b7173605-0823-4baa-a5c1-e5a131619adc.png)
 - 为了支持这些功能，我们需要定义一个数据结构去支持这些功能。
 - 这个数据结构，叫sock。
 - 首先，可以在sock里加入IP和端口字段。这样解决了第一个问题
@@ -353,7 +353,7 @@
 - ### 2.3.2.  基于sock实现网络传输功能
 - 于是，我们将功能重新划分下，定义了一些数据结构。
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1728896642227-b2256a65-8e5d-44ae-9b91-2dc3634e941d.png)
+  ![](../assets/VSCode解析/003_1728896642227-b2256a65-8e5d-44ae-9b91-2dc3634e941d.png)
 - sock是最基础的结构，维护一些任何协议都有可能会用到的收发数据缓冲区。
 - inet_sock特指用了网络传输功能的sock，在sock的基础上还加入了TTL，端口，IP地址这些跟网络传输相关的字段信息。
 - inet_connection_sock 是指面向连接的sock，在inet_sock的基础上加入面向连接的协议里相关字段，比如accept队列，数据包分片大小，握手失败重试次数等。虽然我们现在提到面向连接的协议就是指TCP，但设计上linux需要支持扩展其他面向连接的新协议，
@@ -365,20 +365,20 @@
   这个文件句柄fd其实就是 sock_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) 里的sock_fd。
 - 将句柄暴露给用户，之后用户就可以像操作文件句柄那样去操作这个sock句柄。在用户空间里操作这个句柄，文件系统就会将操作指向内核sock结构。
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1728896949760-dac6002a-bd1b-496f-bc9c-59754f85f978.png)
+  ![](../assets/VSCode解析/004_1728896949760-dac6002a-bd1b-496f-bc9c-59754f85f978.png)
 - 有了sock_fd句柄之后，我们就需要提供一些接口方法，让用户更方便的实现特定的网络编程功能。这些接口，我们列了一下，发现需要有send()，recv()，bind(), listen()，connect()这些。到这里，我们的内核网络传输功能就算设计完成了。
 - socket其实就是个代码库 or 接口层，它介于内核和应用程序之间，提供了一些高度封装过的接口，让我们去使用内核网络传输功能。
 - 平时写的应用程序里代码里虽然用了socket实现了收发数据包的功能，但其实真正执行网络通信功能的，不是应用程序，而是linux内核。相当于应用程序通过socket提供的接口，将网络传输的这部分工作外包给了linux内核。
 - 这听起来像不像我们最熟悉的前后端分离的服务架构，虽然这么说不太严谨，但看上去linux就像是被分成了应用程序和内核两个服务。内核就像是后端，暴露了好多个api接口，其中一类就是socket的send()和recv()这些方法。应用程序就像是前端，负责调用内核提供的接口来实现想要的功能。
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1728897008070-28f7d58c-4c7c-4b1a-9ea6-f484c263ce69.png)
+  ![](../assets/VSCode解析/005_1728897008070-28f7d58c-4c7c-4b1a-9ea6-f484c263ce69.png)
 - 在操作系统内核空间里，实现网络传输功能的结构是sock，基于不同的协议和应用场景，会被泛化为各种类型的xx_sock，它们结合硬件，共同实现了网络传输功能。为了将这部分功能暴露给用户空间的应用程序使用，于是引入了socket层，同时将sock嵌入到文件系统的框架里，sock就变成了一个特殊的文件，用户就可以在用户空间使用文件句柄，也就是socket_fd来操作内核sock的网络传输能力。
 - 这个socket_fd是一个int类型的数字。现在回去看socket的中文翻译，套接字，将它理解为一套用于连接的数字。
 - ### 2.3.4.  socket实现网络通信
 - 整个阶段分为两部分，分别是建立连接和数据传输。
 - 建立连接
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1728897309086-c1e96574-4aa1-4079-ac4b-0264bf6fefd5.png)
+  ![](../assets/VSCode解析/006_1728897309086-c1e96574-4aa1-4079-ac4b-0264bf6fefd5.png)
 	- 在客户端，代码执行socket提供的connect(sockfd, "ip:port")方法时，会通过sockfd句柄找到对应的文件，再根据文件里的信息指向内核的sock结构。通过这个sock结构主动发起三次握手。
 	- 在服务端握手次数还没达到"三次"的连接，叫半连接，完成好三次握手的连接，叫全连接。它们分别会用半连接队列和全连接队列来存放，这两个队列会在你执行listen()方法的时候创建好。当服务端执行accept()方法时，就会从全连接队列里拿出一条全连接。
 	- 至此，连接就算准备好了，之后，就可以开始传输数据。
@@ -391,7 +391,7 @@
 	- 当应用执行send()方法发送数据时，同样也会通过sock_fd句柄找到对应的文件，根据文件指向的sock结构，找到这个sock结构里带的发送缓冲区，将数据会放到发送缓冲区，然后结束流程，内核看心情决定什么时候将这份数据发送出去。
 	- 接收数据流程也类似，当数据送到linux内核后，数据不是立马给到应用程序的，而是先放在接收缓冲区中，数据静静躺着，卑微的等待应用程序什么时候执行recv()方法来拿一下。
 	  
-	  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1728897433251-7c7711ac-9c27-4db7-9784-27fc76191f72.png)
+	  ![](../assets/VSCode解析/007_1728897433251-7c7711ac-9c27-4db7-9784-27fc76191f72.png)
 	- 当你的应用进程执行recv()方法尝试获取（阻塞场景下）接收缓冲区的数据时。
 		- 如果有数据，那正好，取走就好了。这点没啥疑问。
 		- 但如果没数据，就会将自己的进程信息注册到这个sock用的等待队列里，然后进程休眠。如果这时候有数据从远端发过来了，数据进入到接收缓冲区时，内核就会取出sock的等待队列里的进程，唤醒进程来取数据。
@@ -1017,7 +1017,7 @@
 - 上述接口和类的定义对应文件为：src/vs/base/parts/ipc/common/ipc.ts
 - ### 4.3.2.  实现示例
   
-  ![](https://cdn.nlark.com/yuque/0/2024/jpeg/2713067/1708998583271-d0834f61-54a8-43c4-9d1d-f72522c04aca.jpeg)
+  ![](../assets/VSCode解析/008_1708998583271-d0834f61-54a8-43c4-9d1d-f72522c04aca.jpeg)
 - 请求实现（基于 IMessagePassingProtocol 协议）
   
   ```
@@ -1236,7 +1236,7 @@
 - ### 5.1.1.  简要介绍
 - **控制反转（Inversion of Control）**是一种是面向对象编程中的一种设计原则，用来减低计算机代码之间的耦合度。其基本思想是：借助于“第三方”实现具有依赖关系的对象之间的解耦。
   
-  ![](https://cdn.nlark.com/yuque/0/2023/webp/2713067/1695540765789-f62a4f13-ca6a-4c62-b1b7-2810c517cb84.webp)![](https://cdn.nlark.com/yuque/0/2023/webp/2713067/1695540773800-54593eba-df0e-49aa-8fde-3b3ad9ca417b.webp)
+  ![](../assets/VSCode解析/009_1695540765789-f62a4f13-ca6a-4c62-b1b7-2810c517cb84.webp)![](../assets/VSCode解析/010_1695540773800-54593eba-df0e-49aa-8fde-3b3ad9ca417b.webp)
 - 由于引进了中间位置的“第三方”，也就是IOC容器，使得A、B、C、D这4个对象没有了耦合关系，齿轮之间的传动全部依靠“第三方”了，全部对象的控制权全部上缴给“第三方”IOC容器，所以，IOC容器成了整个系统的关键核心。
 - **依赖注入（Dependency Injection）**就是将实例变量传入到一个对象中。**控制反转**是一种思想，**依赖注入**是一种设计模式。IoC框架使用依赖注入作为实现控制反转的方式，但是控制反转还有其他的实现方式。
 - ### 5.1.2.  VSCode依赖注入简要介绍
@@ -1964,7 +1964,7 @@
 - ### 5.3.3.  DAP协议
 - 调试适配器协议（DAP）背后的想法是抽象开发工具的调试支持与调试器或运行时通信协议的方式。对于现有的调试器想要去快速去实现这套协议是不现实的，故我们宁愿去实现一个调试的中间层，即一个调试适配器，去使现有的调试器去适应这套调试适配器协议。 调试适配器协议让开发工具实现通用调试器成为可能，同时对应的调试器也可以通过调试适配器与不同的调试器通信。调试适配器可以在多个开发工具中重复使用，这大大减少了在不同工具中支持新调试器的工作量。
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1695542520394-56a8510e-50e1-42ce-9d17-f7032b575c1a.png)
+  ![](../assets/VSCode解析/011_1695542520394-56a8510e-50e1-42ce-9d17-f7032b575c1a.png)
 - 从图可以看出，从左侧调试UI消息到达对应调试器（Debugger）中间通过Adaptor层统一进行消息的转换，一旦调试相关的消息通讯协议达到一定完成度，工具侧便可无需进行任何修改支持多个调试器中的调试逻辑。
 - ### 5.3.4.  DAP实现解析
 - 当我们在vscode中启动调试模式，实则执行了下面的command
@@ -2049,13 +2049,13 @@
   }));
   ```
 - DAP流程（[https://link.zhihu.com/?target=https%3A//microsoft.github.io/debug-adapter-protocol/overview](https://link.zhihu.com/?target=https%3A//microsoft.github.io/debug-adapter-protocol/overview)）
-- ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1709987768337-f1eeae50-e8fd-465d-b59e-18b644587a3e.png)
+- ![](../assets/VSCode解析/012_1709987768337-f1eeae50-e8fd-465d-b59e-18b644587a3e.png)
 - ### 5.3.5.  DAP和DA
 - DAP (Debug Adapter Protocol)具体的数据格式参考[这里](https://link.zhihu.com/?target=https%3A//microsoft.github.io/debug-adapter-protocol/specification)
 - DA（Debug Adapter）DA需要做些什么来通过DAP与vscode通信呢？
 - 首先我们先来看看DA的目录结构
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1709989783310-1a2fd24a-1f19-4b7b-a7f8-9863c6a42648.png)
+  ![](../assets/VSCode解析/013_1709989783310-1a2fd24a-1f19-4b7b-a7f8-9863c6a42648.png)
 - 这里只说明几个文件的作用
 	- debugSession.ts 分发请求、DA支持的功能等，自己可以通过继承该类实现自己的DA
 	- message.ts DA 响应数据的数据结构
@@ -2790,7 +2790,7 @@
 - 第一种通信实现，是基于Electron IPC的，而第二种则是基于Node IPC了。这也是5.3节中为什么渲染进程和共享进程以及渲染进程和Extension Host等之间的通信是Node IPC。这是因为主进程不仅创建了对应的子进程，而且通过这种通信桥的通信实现，将对应的沟通通道转接了其他的进程。
 - ### 5.5.2.  Caller-Service机制
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1709349158444-2597db9a-32ce-4e0b-a3a6-eeaa5aee1061.png)
+  ![](../assets/VSCode解析/014_1709349158444-2597db9a-32ce-4e0b-a3a6-eeaa5aee1061.png)
 - VSCode的很多概念都被包装成了Service，因此这一小节讲一下Caller-Service机制，即服务调用的最基本的机制。
 - 部分Service实际上是基于IServerChannel进行了包裹，本质上就是一个对Caller（请求方）的进行响应的Service。结合3.3.1节的描述，可以做出如下的结论：
 	- Protocol是基于不同场景下实现的真实通信信道，比如：基于Electron的ipcMain和ipcRender构建的信道，或者基于Electron的MessagePortMain构建的信道，这些都是框架赋予的基本信道，是真实存在的，而其他的概念都是基于逻辑衍生出来的逻辑处理。
@@ -3249,7 +3249,7 @@
 - 很简单，让一个对象同时具有ChannelServer和ChannelClient就可以了。
 - 这时候就会有一个新的概念，那就是IPCClient（IPC Client）。这里和网上有一些资料描述的不一样，那就是一对IPC Client就可以具有一对一的通信，而不是非要一个Client对应一个Server。后者的说法很容易造成误解。
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1709351503663-b4a1979e-7dd3-414c-b301-32b9c3924b07.png)
+  ![](../assets/VSCode解析/015_1709351503663-b4a1979e-7dd3-414c-b301-32b9c3924b07.png)
 - IPC Client的源码也很简单，就是包裹了一个ChannelServer和一个ChannelClient。
   
   ```
@@ -3692,7 +3692,7 @@
 - VSCode源码地址：[https://github.com/microsoft/vscode](https://github.com/microsoft/vscode)
 - VSCode文档地址：[https://code.visualstudio.com/docs](https://code.visualstudio.com/docs)
 - ## 6.1.  VSCode界面设计
-- ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1695539033527-fb1e9e29-faec-4b7f-8751-cd13a90c2f2f.png)
+- ![](../assets/VSCode解析/016_1695539033527-fb1e9e29-faec-4b7f-8751-cd13a90c2f2f.png)
 - ## 6.2.  VSCode软件产品形态
 - VSCode一共有三种形态：
 	- 客户端形态：windows、linux、macos三种主流操作系统的客户端
@@ -3701,7 +3701,7 @@
 - 下图就是官方提供了一个关于SSH如何链接到远端进行远程开发的示意图。
 - 这也就是实现了渲染和工作空间分离的好处。也可以看出来VSCode这个产品设计的精巧之处。
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1719071869495-d0ec4a87-d3ff-4455-8045-1b8072c8a074.png)
+  ![](../assets/VSCode解析/017_1719071869495-d0ec4a87-d3ff-4455-8045-1b8072c8a074.png)
 - ## 6.3.  启动流程（TLDR）
 - ### 6.3.1.  客户端形态
 - VSCode是基于typescript语言开发的。因此，在桌面的状态下，启动会通过node out/main.js来启动整个VSCode的应用程序。而通过对源码中的tsconfig.json来看，out/main.js这个文件是由src/main.js而来的。因此可以去看这个文件。
@@ -4063,7 +4063,7 @@
 - ## 6.4.  VSCode的进程架构
 - ### 6.4.1.  桌面版VSCode进程架构
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1708783486463-ae551d0b-cc99-46f7-b21a-d5147c5ce1f0.png)
+  ![](../assets/VSCode解析/018_1708783486463-ae551d0b-cc99-46f7-b21a-d5147c5ce1f0.png)
 - Main Process（主进程）：是VSCode的入口进程，负责窗口管理、进程间通信、自动更新等全局任务。是一个唯一的进程，即即使开启多个窗口都是只有一个VSCode主进程。
 - Shared Process（共享进程）：全局只有一个共享进程。为多个渲染进行提供一些共享的服务和数据。
 - Render Process（渲染进程）：负责一个窗口的渲染。一个窗口对应一个Render Process。一个Main Process与多个Render Process构成一个Electron应用程序的基本框架。
@@ -4072,7 +4072,7 @@
 - Search Process：搜索是一类计算密集型的任务，单开进程保证软件整体的体验和性能。
 - ### 6.4.2.  SSH Remote进程架构
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1727941354106-fdded3ac-abd1-462e-904a-28c44bdac6aa.png)
+  ![](../assets/VSCode解析/019_1727941354106-fdded3ac-abd1-462e-904a-28c44bdac6aa.png)
 - SSH Remote是使用SSH协议构建的通信通道对远程服务器代码进行处理的一种形态，与之类似的还有Tunnel、Web形态，他们使用的通信协议不太一样而已。
 	- 这个形态下，需要区分Client端和Server端来进行解析。
 	- Client端，也就是Local端。在Local端，主要的进程就是主进程、Shared Process和Render Process，这几个进程都是上面描述的几个进程。
@@ -4139,31 +4139,31 @@
 - ternary-stream：使用命令安装ternary-stream：npm install ternary-stream --global
 - windows-build-tools：使用npm install --global windows-build-tools命令安装会失败；但在失败后C:\Users\xxx\.windows-build-tools下有安装文件vs_BuildTools，直接运行此文件，安装2017版本VS编译环境，选择如下两个安装项目：
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090398293-d1658fe6-79d7-4b90-9fbb-1102eeaba9d6.png)
+  ![](../assets/VSCode解析/020_1702090398293-d1658fe6-79d7-4b90-9fbb-1102eeaba9d6.png)
 	- 另外，如果在后面的过程中出现了Warning MSB8038和Fatal error LINK1181的问题，需要在这个阶段安装一下一个单个组件。
 	  
-	  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090578353-1442c3d4-d9e7-4447-9127-1fac13e58ce4.png)
+	  ![](../assets/VSCode解析/021_1702090578353-1442c3d4-d9e7-4447-9127-1fac13e58ce4.png)
 - ### 7.1.2.  编译过程
 - 另外打开一个cmd窗口，进入vscode代码目录，执行yarn命令。第一次的话这个过程时间比较长，且需要翻墙。上述提到的问题也可能在这个阶段发生。这个阶段其实是在下载项目所需要的代码库。如果向加快速度，可以将yarn.lock中的国外地址改为国内的yarn源地址即可。
 - 完成之后，执行命令 **yarn run watch **进行编译，过程可能会较久，也可以执行**yarn compile**。编译完成后显示如下：
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090722496-3ca01944-3d18-47b6-ad09-e6edda03c5f9.png)
+  ![](../assets/VSCode解析/022_1702090722496-3ca01944-3d18-47b6-ad09-e6edda03c5f9.png)
 - 不要关闭此窗口。
 - 运行VSCode的代码。另外起cmd命令窗，在代码目录下执行 .\scripts\code.bat 命令，结果如下：
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090762965-2af1c7ea-145e-4c5f-949d-4c32d15145d1.png)
+  ![](../assets/VSCode解析/023_1702090762965-2af1c7ea-145e-4c5f-949d-4c32d15145d1.png)
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090767731-e1825163-375e-4023-8b08-1cb8b807e03b.png)
+  ![](../assets/VSCode解析/024_1702090767731-e1825163-375e-4023-8b08-1cb8b807e03b.png)
 - ### 7.1.3.  打包过程
 - 1. 安装打包工具 gulp ：npm install gulp -g
 - 2. 自研插件使用 yarn 命令下载依赖，不要使用 npm install，否则在编译绿色可执行文件时会出现依赖包异常；
 - 3. 拷贝插件完成后，在VsCode源码目录中重新执行 yarn、yarn run watch及运行.\scripts\code.bat，看下插件是否编译进去了；
 - 4. 在源码目录下，执行 yarn gulp vscode-win32-x64 命令，该命令会在与源码同目录下生成一个VSCode-win32-x64 文件夹，其中有个 Code - OSS.exe 绿色免安装文件，双击即可运行；该命令执行时间会比较长，耐心等待；
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090860935-22d20234-9394-4110-bcdb-293be5bd3590.png)
+  ![](../assets/VSCode解析/025_1702090860935-22d20234-9394-4110-bcdb-293be5bd3590.png)
 - 5. 完成步骤3后，在源码目录下执行命令yarn gulp vscode-win32-x64-inno-updater，该命令会在VSCode-win32-x64安装可安装文件所需要的工具，在tools目录下；
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1702090854457-84c4f12d-a13c-4315-b324-88b196789008.png)
+  ![](../assets/VSCode解析/026_1702090854457-84c4f12d-a13c-4315-b324-88b196789008.png)
 - 6. 完成步骤4后，在源码目录下执行命令yarn gulp vscode-win32-x64-user-setup ，会在.build\win32-x64\user-setup目录下出现VSCodeSetup.exe安装文件，双击即可安装。
 - ## 7.2.  Linux平台-Debian/Ubuntu
 - ### 7.2.1.  编译工具准备
@@ -4174,7 +4174,7 @@
 - 如果出现定位不到python-is-python3包，那就不安装这个包。
 - 如果在yarn的时候，出现以下的问题时，安装一下libkrb5-dev这个包
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1707272975054-b1560640-623b-4e3e-8530-3735e3e36004.png)
+  ![](../assets/VSCode解析/027_1707272975054-b1560640-623b-4e3e-8530-3735e3e36004.png)
 	- sudo apt-get install libkrb5-dev
 - 在linux环境下安装python可以参考：
   
@@ -4448,7 +4448,7 @@
 - 使用 **Ctrl+Shift+P **命令打开命令行。输入 **Hello World **，点击就可以看到效果。
 - 注意：如果在创建项目时，出现了以下问题。可以通过使用管理员权限在shell中输入  **set-ExecutionPolicy RemoteSigned **来解决问题。
   
-  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1695225724102-2942f4fc-dcb4-410e-a66f-6d94bf998bef.png)
+  ![](../assets/VSCode解析/028_1695225724102-2942f4fc-dcb4-410e-a66f-6d94bf998bef.png)
 - ## 9.2.  使用React开发WebView
 - React相关的框架说白了其实就是将虚拟DOM转化为真实DOM的一系列的js文件。因此，如果想要将react引入到vscode插件中去，需要做两步：第一步，开发一个React的前端项目，主要处理前端的节点和路由相关的内容。第二步，将入口文件作为一个地址传给前端的页面。
 - 可以设置一个Provider，一个页面的tsx。
@@ -4620,7 +4620,7 @@
 - ## 10.2.  Open VSX
 - Open VSX是一个供应商中立的开源替代品,用于Visual Studio Marketplace。它提供了一个管理VS Code扩展的服务器应用程序、一个类似于VS Code Marketplace的Web应用程序,以及一个类似于vsce的用于发布扩展的命令行工具。官方链接：[https://open-vsx.org/](https://open-vsx.org/)
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1729221674600-6c9d95fb-176c-4947-80ae-974c7f21c774.png)
+  ![](../assets/VSCode解析/029_1729221674600-6c9d95fb-176c-4947-80ae-974c7f21c774.png)
 - 最大的作用就是用于代替微软的vscode插件市场。也可以做私有部署。
 - ### 10.2.1.  部署
 - 部署使用的docker部署的。直接使用docker-compose进行部署就可以了。

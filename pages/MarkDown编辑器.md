@@ -35,12 +35,12 @@
 - 配合 defaults.ts 提供默认配置，Tokens.ts 定义所有 token 类型。
 - 流程示意：
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1753582010786-76f5b30f-0d6e-4faa-a809-ad614443c28e.png)
+  ![](../assets/MarkDown编辑器/001_1753582010786-76f5b30f-0d6e-4faa-a809-ad614443c28e.png)
 - ## 2.2.  核心文件说明
   
   运行时流程图
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1753886914575-514f6451-c20b-4bfb-bd8a-1cb2f8a46081.png)
+  ![](../assets/MarkDown编辑器/002_1753886914575-514f6451-c20b-4bfb-bd8a-1cb2f8a46081.png)
   
   核心文件角色说明
 - marked.ts
