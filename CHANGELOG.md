@@ -24,6 +24,7 @@
 - Add Web Shell design and implementation notes (`pages/Web Shell的设计与实现.md`) covering the two-process architecture (a V8 render environment and a Node.js server environment bridged over WebSocket/IPC), the render-side shell (xterm.js terminal, `WebLinksAddon`/`FitAddon`, key and message event wiring), and the server-side shell (`ssh2` client with SFTP binding, shell stream data/error/close/exit handling); link it from `pages/VSCode解析.md` as a wikilink
 - Add software design principles notes (`pages/软件设计原则.md`) covering the six OO design principles — Open/Closed, Dependency Inversion, Liskov Substitution, Interface Segregation, Demeter (Law of Least Knowledge), and Composite Reuse — each with a Java code example
 - Add VSCode debug-configuration notes (`pages/VSCode调试配置.md`) covering `launch.json` structure and fields, creating/configuring debug sessions, and example configurations for Node.js, Python, Java, C#, web, and client-server debugging scenarios
+- Add Codelldb analysis notes (`pages/Codelldb解析.md`) covering Windows build steps (MSVC offline installer, Rust/Python prerequisites, cmake workflow), adapter architecture (DAP session, codec, debug-session modules, expression handling), startup flow and reverse-connector mechanism, Tokio + native thread model, VS Code extension integration (configuration resolution, Cargo build, variable expansion), and mpsc/bounded-channel/backpressure techniques
 
 ### Changed
 
