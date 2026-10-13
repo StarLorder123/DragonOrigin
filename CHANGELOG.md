@@ -4,6 +4,7 @@
 
 ### Documentation
 
+- Add LLVM architecture and compilation process notes (`pages/LLVM详解.md`) covering LLVM modular design (frontend/optimizer/backend), Clang frontend and IR intermediate representation, C++ source compilation pipeline (preprocessing through linking), code forms and conversions (source → IR → bitcode → assembly → object → executable), LLVM toolchain utilities, source compilation environment setup (CMake/Ninja/Xcode), application scenarios (AST analysis, Clang plugins, Pass development), and practical ObjC code obfuscation example with clang-obfuscator
 - Add VSCode architecture and startup notes (`pages/VSCode解析.md`) covering the product forms (client/server/cli), client startup and window-opening flows, headless Server/Server-CLI/CLI forms, desktop vs SSH Remote process architectures, and the source structure and build/package process
 - Add VSCode IPC and Remote SSH notes (`pages/VSCode解析.md`) covering `ChannelClient`/`ChannelServer`, `IPCClient`/`IPCServer`/`Connection`, the `MessagePortMain` bridge, Caller-Service request-response, one-to-one/one-to-many IPC, and the Remote SSH connection flow
 - Add VSCode extension mechanism notes (`pages/VSCode解析.md`) covering plugin loading, extension host process startup and activation, and the virtual `vscode` module (hijacking `Module._load()`)
