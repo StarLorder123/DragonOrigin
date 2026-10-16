@@ -4,6 +4,7 @@
 
 ### Documentation
 
+- Add Docker basics notes (`pages/Docker基本知识.md`) covering Docker installation on Debian, container operations (run, start, stop, restart, attach, exec, export, import, remove), image management (pull, search, build, tag, push), Dockerfile construction, port mapping and container networking, Docker Compose multi-container applications, Docker Machine virtual host management, and Docker Swarm cluster orchestration
 - Add Rust fundamentals notes (`pages/Rust基础.md`) covering Rust environment setup (Rustup installation, VSCode integration), variable binding and destructuring, mutability, ownership principles, and comprehensive Rust programming language fundamentals
 - Add LLVM architecture and compilation process notes (`pages/LLVM详解.md`) covering LLVM modular design (frontend/optimizer/backend), Clang frontend and IR intermediate representation, C++ source compilation pipeline (preprocessing through linking), code forms and conversions (source → IR → bitcode → assembly → object → executable), LLVM toolchain utilities, source compilation environment setup (CMake/Ninja/Xcode), application scenarios (AST analysis, Clang plugins, Pass development), and practical ObjC code obfuscation example with clang-obfuscator
 - Add VSCode architecture and startup notes (`pages/VSCode解析.md`) covering the product forms (client/server/cli), client startup and window-opening flows, headless Server/Server-CLI/CLI forms, desktop vs SSH Remote process architectures, and the source structure and build/package process
