@@ -54,6 +54,7 @@
 - Localize external CDN image references to local assets across 8 markdown pages (Electron基础, MarkDown编译错误, Nodejs服务环境搭建, TypeScript基础知识, VSCode解析, Webpack基础, 软件设计原则, 软件设计模式) — replace yuque.com CDN URLs with relative `../assets/` paths and add corresponding asset directories
 - Remove empty `pages/contents.md` (recycled by Logseq)
 - Reformat hardware breakpoint section in `pages/嵌入式IDE可观测性.md` for consistent heading structure and indentation
+- Add operating system implementation notes (`pages/操作系统.md`) covering OS concepts and responsibilities, development environment setup (gcc/NASM, VirtualBox, CentOS 7, virtual network and shared-folder configuration, bochs installation), MBR and boot flow, CPU real mode and protected mode (segmentation, GDT/segment descriptors, privilege levels), interrupts, memory management, processes and threads, synchronization and locking, user-process creation, system-call implementation, heap memory management, disk driver, file system, and system interaction
 
 ### Chore
 
