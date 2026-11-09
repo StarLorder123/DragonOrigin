@@ -5,7 +5,7 @@
 - 历史：LLVM 项目的发展起源于 2000 年，伊利诺伊大学厄巴纳-香槟分校维克拉姆·艾夫（Vikram Adve）与克里斯·拉特纳（Chris Lattner）的研究，他们想要为所有静态及动态语言创造出动态的编译技术。LLVM是以 BSD许可来发展的开源软件。2005年，苹果雇佣了克里斯·拉特纳及他的团队为苹果电脑开发应用程序系统，LLVM 为现今 macOS 及 iOS 开发工具的一部分。
 - ## 1.1.  传统编译器架构
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1750721188109-cc35cfdc-f559-4bfe-b759-2a50086673cf.png)
+  ![](../assets/LLVM详解/001_1750721188109-cc35cfdc-f559-4bfe-b759-2a50086673cf.png)
   
   **编译器的三段式设计：**
 - **Frontend**（前端）：主要工作是解析源代码：词法分析、语法分析、语义分析、检查错误，并构建抽象语法树（Abstract Syntax Tree AST）来表示输入代码。AST 可以选择性地转换为中间表达式，以便用于优化器。
@@ -14,7 +14,7 @@
   
   三段式设计模式的优势体现在当编译器决定支持多种源语言或目标体系结构时。如果编译器在其优化器中使用公共代码表示，那么可以为任何可以编译到它的语言编写前端，也可以为任何可以从它编译的目标编写后端，如下图所示。
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1750721206860-e5a72b6d-bf5a-4179-94c8-e4e0d1d74a01.png)
+  ![](../assets/LLVM详解/002_1750721206860-e5a72b6d-bf5a-4179-94c8-e4e0d1d74a01.png)
   
   虽然这种三段式的编译器有很多优点，但是在实际中这一结构却从来没有被完美实现过。例如：Perl、Python、Ruby和Java的实现没有共享代码。此外，像Glasgow Haskell Compiler (GHC)和FreeBASIC这样的项目虽然可以重定向到多个不同的CPU，但是它们的实现非常依赖于某一种特定的编程语言（也就是它们所支持那种语言）。各种用于特殊用途的编译器技术被用于实现JIT编译器，用以实现图像处理、正则表达式、显卡驱动程序，或者被用于其他需要密集型CPU工作的领域。
   
@@ -87,10 +87,10 @@
   
   在广义上 LLVM 指整个 LLVM 框架，狭义上 LLVM 指 LLVM 后端。LLVM 项目是 围绕“LLVM Core libraries” 这个核心库而展开的，那时候还并没有前端，只有 LLVM 后端。从现在 LLVM 的项目来看，LLVM 指“LLVM 整个框架”这个定义是准确的！
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1750893491322-227470e7-d275-4a5a-9400-81b63f0072dc.png)
+  ![](../assets/LLVM详解/003_1750893491322-227470e7-d275-4a5a-9400-81b63f0072dc.png)
 - # 2.  LLVM如何工作
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1750980104713-163d1a4f-3999-40bb-a763-e3f4882738b7.png)
+  ![](../assets/LLVM详解/004_1750980104713-163d1a4f-3999-40bb-a763-e3f4882738b7.png)
 - ## 2.1.  C++源文件编译过程
 - 创建文件
   
@@ -430,7 +430,7 @@
   
   用图示表示的会更清晰一些，这里画了一下几种代码格式之间的转换关系
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1751326078707-301ea3c4-37e1-4a5e-82e5-628373c97099.png)
+  ![](../assets/LLVM详解/005_1751326078707-301ea3c4-37e1-4a5e-82e5-628373c97099.png)
 - ### 2.5.2.  常用工具
   
   llvm的文档工作还是做的非常好的，这里节选了llvm官方文档对自家工具的介绍，重点说一下常用的一些命令，详细全文见[https://llvm.org/docs/CommandGuide/index.html](https://link.zhihu.com/?target=https%3A//llvm.org/docs/CommandGuide/index.html)
@@ -446,7 +446,7 @@
 - **llvm-link** llvm链接器，将多个bitcode链接为一个bitcode，输入为多个bitcoede，输出一个链接后的bitcode。
 - **llvm-config** 输出llvm编译选项，根据选项，输出合适的llvm的编译选项。
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1751326111808-88506ab4-a17a-49be-8ff2-6e87025b13c2.png)
+  ![](../assets/LLVM详解/006_1751326111808-88506ab4-a17a-49be-8ff2-6e87025b13c2.png)
 - ### 2.5.3.  编译链接时用到的LLVM lib
   
   通常这部分会使用llvm-config来代替调，但了解这些库的功能对于未来可能的debug还是很有帮助的。（参考 [http://faculty.sist.shanghaitech.edu.cn/faculty/songfu/course/spring2018/CS131/llvm.pdf](https://link.zhihu.com/?target=http%3A//faculty.sist.shanghaitech.edu.cn/faculty/songfu/course/spring2018/CS131/llvm.pdf) -Getting to know LLVM’s basic libraries）
@@ -460,7 +460,7 @@
   
   **完整的llvm工作pipeline如下：**
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1751326136681-814c44c0-09a7-4e49-8e99-543874642aaa.png)
+  ![](../assets/LLVM详解/007_1751326136681-814c44c0-09a7-4e49-8e99-543874642aaa.png)
 - # 3.  LLVM环境搭建（源码编译）
 - ## 3.1.  Step1：下载 LLVM 源码
   
@@ -579,13 +579,13 @@
   
   首次打开 LLVM.xcodeproj 项目，Xcode 会弹出窗口提示对 Scheme 进行配置。选择自动创建 Schemes 即可。
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1751412425044-ca3b1715-837d-4b54-ba9a-b0449bd8375f.png)
+  ![](../assets/LLVM详解/008_1751412425044-ca3b1715-837d-4b54-ba9a-b0449bd8375f.png)
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1751412424996-803d701d-a64d-45ce-933d-1e079821c0e3.png)
+  ![](../assets/LLVM详解/009_1751412424996-803d701d-a64d-45ce-933d-1e079821c0e3.png)
   
   打开LLVM.xcodeproj 工程，LLVM项目的目录结构如下
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1751412425520-426252b3-c087-40bc-bc2a-155e3acc33d4.png)
+  ![](../assets/LLVM详解/010_1751412425520-426252b3-c087-40bc-bc2a-155e3acc33d4.png)
   
   Clang libraries 目录下分布了大量的模块，这些模块都可以单独生成一个库文件
   
@@ -593,11 +593,11 @@
   
   Clang 所具备的功能例如：参数解析、词法分析、语法分析、生成语法树、源文件读写等对应的源码都在 Clang libraries 模块下
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1751412425223-b70465d9-3004-44b3-920f-199d7b239174.png)
+  ![](../assets/LLVM详解/011_1751412425223-b70465d9-3004-44b3-920f-199d7b239174.png)
   
   最后，选择Scheme ALL_BUILD，按下Command+B开始构建。
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1751412425368-c6a2c204-58f2-470c-baa9-28a9e278e74d.png)
+  ![](../assets/LLVM详解/012_1751412425368-c6a2c204-58f2-470c-baa9-28a9e278e74d.png)
   
   接下来，可以选择泡杯咖啡休息一会了。Xcode 编译 LLVM 可能会持续一个小时左右。
 - # 4.  应用场景
@@ -752,11 +752,11 @@
   
   LLVM.xcodeproj重新生成后，会多出一个ClangObfuscator的Target并且Clang executables目录中多出如下结构:
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1751759264927-83b0e0e7-2174-48a2-bc06-79a15a1053f5.png)
+  ![](../assets/LLVM详解/013_1751759264927-83b0e0e7-2174-48a2-bc06-79a15a1053f5.png)
   
   接下来选中ClangObfuscator就可以开始编码了：
   
-  ![](https://cdn.nlark.com/yuque/0/2025/png/2713067/1751759264753-31f8cfe1-a445-4906-9646-4812a2f4e82b.png)
+  ![](../assets/LLVM详解/014_1751759264753-31f8cfe1-a445-4906-9646-4812a2f4e82b.png)
 - # 6.  名词解释
 - clang: C语言编译器，类似于gcc
 - clang++: C++编译器，类似于g++。clang++只是clang的一个别名；

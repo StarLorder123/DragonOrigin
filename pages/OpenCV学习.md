@@ -20,7 +20,7 @@
   ```
 - ### 1.2 HSV色彩空间
   
-  ![](https://cdn.nlark.com/yuque/0/2022/png/2713067/1653985815007-dcb47dd8-dc75-4a39-b7cf-063fae16084f.png)
+  ![](../assets/OpenCV学习/001_1653985815007-dcb47dd8-dc75-4a39-b7cf-063fae16084f.png)
 - HSV 表达彩色图像的方式由三个部分组成：
 	- Hue（色调、色相）
 	- Saturation（饱和度、色彩纯净度）

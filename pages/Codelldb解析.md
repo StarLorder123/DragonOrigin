@@ -42,7 +42,7 @@
 - # 2.  解析
 - ## 2.1.  架构
   
-  ![](https://cdn.nlark.com/yuque/0/2025/svg/2713067/1757806023785-3ed72f18-00ac-4994-9595-8a5d7ef258a5.svg)
+  ![](../assets/Codelldb解析/001_1757806023785-3ed72f18-00ac-4994-9595-8a5d7ef258a5.svg)
   
   `adapter/codelldb` 是 CodeLLDB 调试器适配器的核心组件，它实现了 Debug Adapter Protocol (DAP)，作为 VS Code 和 LLDB 调试器之间的桥梁。
 - ### 2.1.1.  主要模块结构
@@ -536,7 +536,7 @@
 - 完成后发送响应
 - ## 2.2.  启动流程
   
-  ![](https://cdn.nlark.com/yuque/0/2025/svg/2713067/1757806099994-2aafbfcd-2b07-4842-97f3-b5193233dd25.svg)
+  ![](../assets/Codelldb解析/002_1757806099994-2aafbfcd-2b07-4842-97f3-b5193233dd25.svg)
 - 插件的启动流程如上述图。
 - 关键的代码路径
 	- extension/main.ts 启动入口

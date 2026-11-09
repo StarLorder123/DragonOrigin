@@ -547,7 +547,7 @@
 	- **swarm mananger**：负责整个集群的管理工作包括集群配置、服务管理等所有跟集群有关的工作。
 	- **work node**：即图中的 available node，主要负责运行相应的服务来执行任务（task）。
 	  
-	  ![](https://cdn.nlark.com/yuque/0/2023/png/2713067/1697843374352-3987db1c-ebee-4e3d-bcb3-e44bd9c57a03.png)
+	  ![](../assets/Docker基本知识/001_1697843374352-3987db1c-ebee-4e3d-bcb3-e44bd9c57a03.png)
 - ### 2.8.2.  使用
 - 创建swarm集群管理节点
 	- 创建 docker 机器：
