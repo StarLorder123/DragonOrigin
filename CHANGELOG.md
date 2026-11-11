@@ -6,6 +6,7 @@ All notable changes to the DragonOrigin knowledge base are documented in this fi
 
 ### Added
 
+- **RPC protocol and Protobuf** (`pages/RPC协议.md`) — remote procedure call concepts and synchronous call semantics, the RPC workflow (client/server stubs, marshalling and unmarshalling), Protobuf syntax and schema evolution rules (field numbering, singular/repeated, reserved, import, nested types, Any, oneof, map, package, backward compatibility), and Node.js implementations with JSON-RPC (jayson) and gRPC
 - **High concurrency, availability, and performance** (`pages/高并发&高可用&高性能.md`) — Java BIO/NIO/AIO models, RPC protocols, and a real-time project folder sync case study (chokidar, Netty, Spring Boot, PostgreSQL/Redis), plus local images
 - **Network security** (`pages/网络安全.md`) — information gathering (active/passive, Google hacking), network commands and tools (arping, netdiscover, ping, traceroute, Nmap), Wireshark capture and display filters, Nmap scanning and service/OS detection, and Burp Suite modules (Proxy, Target, Repeater, Intruder, Decoder, Comparer)
 - **C language classic examples** (`pages/C语言经典用例.md`) — 18 beginner programs including the multiplication table, matrix rotation, classic math problems, primes and perfect numbers, triangle printing, sorting and searching, struct pointers, and string exercises
