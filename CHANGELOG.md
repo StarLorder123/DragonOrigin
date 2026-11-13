@@ -6,6 +6,7 @@ All notable changes to the DragonOrigin knowledge base are documented in this fi
 
 ### Added
 
+- **Go fundamentals** (`pages/Go基础知识.md`) — Windows installation and VSCode toolchain setup (GOROOT/PATH, GO111MODULE, GOPROXY, Go extension), first module with `go mod init`/`go work init`, variables and scope, constants and enums, basic data types, structs, control flow and operators, functions, methods and interfaces, and error handling with `error`, `panic` and `recover`; plus OOP through anonymous composition and anonymous fields, adding methods to types, value vs reference semantics, and method sets
 - **Server-Sent Events** (`pages/SSE.md`) — HTTP streaming-based server push, SSE vs WebSocket trade-offs (unidirectional vs full-duplex, protocol weight, built-in reconnection, text vs binary), and Node.js client (`eventsource`) and server examples
 - **RPC protocol and Protobuf** (`pages/RPC协议.md`) — remote procedure call concepts and synchronous call semantics, the RPC workflow (client/server stubs, marshalling and unmarshalling), Protobuf syntax and schema evolution rules (field numbering, singular/repeated, reserved, import, nested types, Any, oneof, map, package, backward compatibility), and Node.js implementations with JSON-RPC (jayson) and gRPC
 - **High concurrency, availability, and performance** (`pages/高并发&高可用&高性能.md`) — Java BIO/NIO/AIO models, RPC protocols, and a real-time project folder sync case study (chokidar, Netty, Spring Boot, PostgreSQL/Redis), plus local images
