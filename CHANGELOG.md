@@ -6,6 +6,7 @@ All notable changes to the DragonOrigin knowledge base are documented in this fi
 
 ### Added
 
+- **Advanced Go** (`pages/Go进阶知识.md`) — building a Go project (`go mod tidy`/`download`/`vendor`), GORM models and CRUD, Gin (RESTful routes, templates, HTML/JSON rendering, parameters, uploads, redirects, middleware), Go Redis, Go MongoDB and BSON, and unit testing with `go test`, GoConvey, monkey patching, gomock, MySQL/Redis and HTTP tests, and Testify
 - **Go practice cases** (`pages/Go实践案例.md`) — three progressive todo-app practices: a layered dao/entity/controller split with Gin routing, adding GORM MySQL connectivity with AutoMigrate and CRUD handlers, and a bare Gin route skeleton for the Vue todo exercise
 - **Go fundamentals** (`pages/Go基础知识.md`) — Windows installation and VSCode toolchain setup (GOROOT/PATH, GO111MODULE, GOPROXY, Go extension), first module with `go mod init`/`go work init`, variables and scope, constants and enums, basic data types, structs, control flow and operators, functions, methods and interfaces, and error handling with `error`, `panic` and `recover`; plus OOP through anonymous composition and anonymous fields, adding methods to types, value vs reference semantics, and method sets
 - **Server-Sent Events** (`pages/SSE.md`) — HTTP streaming-based server push, SSE vs WebSocket trade-offs (unidirectional vs full-duplex, protocol weight, built-in reconnection, text vs binary), and Node.js client (`eventsource`) and server examples
