@@ -6,7 +6,7 @@
 - ## 1.1.  RPC工作流程
 - 在 RPC 的工作期间，将执行以下步骤：
   
-  ![](https://cdn.nlark.com/yuque/0/2024/png/2713067/1724858207553-473d25b9-6aa0-4536-bb17-4035aebbe0af.png)
+  ![](../assets/RPC协议/001_1724858207553-473d25b9-6aa0-4536-bb17-4035aebbe0af.png)
 - RPC 的工作过程如下：
 	- 服务消费方（client）调用以本地调用方式调用服务；
 	- client stub 接收到调用后负责将方法、参数等组装成能够进行网络传输的消息体；这就是所谓的 marshalling。

@@ -2,6 +2,14 @@
 
 All notable changes to the DragonOrigin knowledge base are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is organized by month, newest first.
 
+## [2026-11] - 2026-11-18
+
+### Changed
+
+- Localize all 75 remote note images into per-page `assets/<page>/` directories and rewrite the references to relative `../assets/` paths: Go fundamentals (2), advanced Go (2), Go framework implementation (7), RPC protocol (1), and compiler principles (63, including 42 LaTeX formula SVGs); no remote image references remain in `pages/`
+- Update `pages/索引.md` — add a Go section and index the previously missing Go notes, `编译原理`, `RPC协议` and `SSE`, renumbering the topic sections to 15
+- Rewrite `README.md` — reflect the current 46-note scope, repository layout, content themes and local-asset convention, and link the index
+
 ## [2026-11] - 2026-11-09
 
 ### Added
