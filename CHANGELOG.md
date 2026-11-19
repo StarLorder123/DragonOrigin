@@ -2,6 +2,12 @@
 
 All notable changes to the DragonOrigin knowledge base are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is organized by month, newest first.
 
+## [2026-11] - 2026-11-20
+
+### Added
+
+- **Dart programming language** (`pages/Dart编程语言.md`) — VSCode environment setup, Hello World and variables with type inference and sound null safety, variable types, functions (parameters, closures, anonymous functions, lexical scope), operators, control flow, exceptions, classes (constructors, getters/setters, abstract classes, implicit interfaces, inheritance, operator overloading, enums, mixins, class variables and methods), generics, library visibility (`import`/`export`/`part`), asynchronous support (`Future`, `async`/`await`, `Stream`), generators (`sync*`/`async*`/`yield*`), callable classes, typedefs, metadata, and comments/documentation
+
 ## [2026-11] - 2026-11-18
 
 ### Changed
