@@ -2,6 +2,12 @@
 
 All notable changes to the DragonOrigin knowledge base are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is organized by month, newest first.
 
+## [2026-11] - 2026-11-21
+
+### Added
+
+- **LLVM compiler analysis** (`pages/LLVM编译器分析.md`) — the three-stage frontend/optimizer/backend architecture, Clang's lexical, syntax and semantic analysis with LLVM IR generation, the Pass-based middle-end, and backend instruction selection, register allocation, scheduling, code emission and debug-info generation
+
 ## [2026-11] - 2026-11-20
 
 ### Added
