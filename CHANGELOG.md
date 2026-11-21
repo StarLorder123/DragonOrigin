@@ -2,6 +2,14 @@
 
 All notable changes to the DragonOrigin knowledge base are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is organized by month, newest first.
 
+## [2026-11] - 2026-11-22
+
+### Added
+
+- LLVM IR representations in `pages/LLVM编译器分析.md` — the text (`.ll`), bitcode (`.bc`) and in-memory forms with a sample IR function
+- An end-to-end compilation flow diagram from Clang frontend through analysis/transform passes to backend instruction selection, register allocation, scheduling, code emission and debug-info generation
+- A JIT (ORC) framework overview covering IR/object transforms and the compile/materialize stages
+
 ## [2026-11] - 2026-11-21
 
 ### Added
