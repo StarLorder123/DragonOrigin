@@ -163,3 +163,219 @@ LLVM 还支持即时编译 (Just-In-Time Compilation)，通过 ORC (On-Request C
 │  └──────────┘  └──────────────────┘ │
 └─────────────────────────────────────┘
 ```
+
+## LLVM IR 语言参考
+
+LLVM IR 是 LLVM 编译器的核心表示形式，是一种类型化、静态单赋值（SSA）的中间表示。本节基于 LLVM 语言参考手册，介绍 LLVM IR 的关键概念。
+
+### LLVM IR 的设计目标
+
+LLVM IR 的设计目标包括：
+
+1. **轻量级和低层次**：足够接近硬件，便于代码生成和优化
+2. **类型安全**：提供类型信息，支持高级优化
+3. **表达能力**：能够干净地表示所有高级语言
+4. **可扩展性**：易于添加新的操作和优化
+
+### 标识符
+
+LLVM 标识符分为两种基本类型：
+
+| 类型 | 前缀 | 示例 | 说明 |
+|------|------|------|------|
+| **全局标识符** | `@` | `@main`, `@global_var` | 函数、全局变量 |
+| **局部标识符** | `%` | `%result`, `%x` | 寄存器名称、类型 |
+
+标识符格式：
+- **命名标识符**: `%foo`, `@DivisionByZero`
+- **未命名标识符**: `%12`, `@2`（自动编号的临时变量）
+
+### 类型系统
+
+LLVM IR 支持丰富的类型系统：
+
+```llvm
+; 基本类型
+void                           ; 空类型
+i1                             ; 1位整数（布尔）
+i8, i16, i32, i64, i128        ; 整数类型
+float, double, half, bfloat    ; 浮点类型
+x86_fp80, fp128, ppc_fp128     ; 特殊浮点类型
+
+; 复合类型
+[10 x i32]                     ; 数组：10个i32
+{i32, i64, float}              ; 结构体
+{i32, [4 x i8]}                ; 嵌套结构体
+ptr                            ; 指针类型（opaque pointer）
+<4 x i32>                      ; 向量：4个i32
+
+; 函数类型
+i32 (i32, i32)                 ; 接受2个i32，返回i32
+ptr (ptr)                      ; 接受指针，返回指针
+```
+
+### 常量
+
+```llvm
+; 整数常量
+42                             ; 十进制
+0x2A                           ; 十六进制（需要类型上下文）
+
+; 浮点常量
+3.14159
+1.0E+0                         ; 科学计数法
+
+; 全局字符串
+@.str = private constant [12 x i8] c"hello world\00"
+
+; 数组常量
+@arr = global [3 x i32] [i32 1, i32 2, i32 3]
+
+; 结构体常量
+@point = global {i32, i32} {i32 10, i32 20}
+
+; undef 和 poison
+undef                          ; 未定义值
+poison                         ; 毒值（使用会导致未定义行为）
+
+; null 指针
+ptr null                       ; 空指针
+```
+
+### 指令示例
+
+**算术指令**:
+```llvm
+; 整数算术
+%sum = add i32 %a, %b          ; 加法
+%diff = sub i32 %a, %b         ; 减法
+%prod = mul i32 %a, %b         ; 乘法
+%quot = sdiv i32 %a, %b        ; 有符号除法
+%rem = srem i32 %a, %b         ; 有符号取余
+
+; 位运算
+%and = and i32 %a, %b          ; 按位与
+%or = or i32 %a, %b            ; 按位或
+%xor = xor i32 %a, %b          ; 按位异或
+%shl = shl i32 %a, %b          ; 左移
+%shr = ashr i32 %a, %b         ; 算术右移
+```
+
+**内存指令**:
+```llvm
+; 分配
+%ptr = alloca i32              ; 在栈上分配 i32
+%arr = alloca [10 x i32]       ; 在栈上分配数组
+
+; 加载和存储
+%val = load i32, ptr %ptr      ; 从指针加载
+store i32 %val, ptr %ptr       ; 存储到指针
+
+; 内存操作
+call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %src, i64 %n, i1 false)
+call void @llvm.memset.p0.i64(ptr %dst, i8 %val, i64 %n, i1 false)
+```
+
+**控制流指令**:
+```llvm
+; 条件分支
+br i1 %cond, label %then, label %else
+
+; 无条件分支
+br label %next
+
+; 多路分支
+switch i32 %val, label %default [
+  i32 0, label %case0
+  i32 1, label %case1
+  i32 2, label %case2
+]
+
+; PHI 节点（SSA 汇合点）
+%result = phi i32 [%a, %bb1], [%b, %bb2]
+```
+
+**函数调用**:
+```llvm
+; 普通调用
+%result = call i32 @foo(i32 %arg1, i32 %arg2)
+
+; 尾调用（优化调用帧）
+%result = tail call i32 @foo(i32 %arg)
+
+; 内联调用
+%result = musttail call i32 @foo(i32 %arg)
+
+; 通过指针调用
+%result = call i32 %funcptr(i32 %arg)
+```
+
+### 函数定义
+
+```llvm
+; 函数定义
+define i32 @add(i32 %a, i32 %b) {
+entry:
+  %result = add i32 %a, %b
+  ret i32 %result
+}
+
+; 带属性的函数
+define i32 @fast_add(i32 %a, i32 %b) #0 {
+  %result = add i32 %a, %b
+  ret i32 %result
+}
+
+; 声明外部函数
+declare i32 @printf(ptr nocapture readonly, ...)
+
+; 属性组
+attributes #0 = { nounwind readnone "target-cpu"="haswell" }
+```
+
+### 模块结构
+
+```llvm
+; 完整的 LLVM 模块示例
+
+; 目标信息
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-pc-linux-gnu"
+
+; 全局变量
+@global_counter = global i32 0, align 4
+@.str = private unnamed_addr constant [13 x i8] c"hello world\0A\00"
+
+; 函数声明
+declare i32 @puts(ptr)
+
+; 函数定义
+define i32 @main() {
+entry:
+  %call = call i32 @puts(ptr @.str)
+  ret i32 0
+}
+
+; 元数据
+!llvm.module.flags = !{!0}
+!0 = !{i32 1, !"wchar_size", i32 4}
+```
+
+### Well-Formedness（良好形成性）
+
+LLVM IR 有一些"良好形成"的要求：
+
+1. **支配性**: 值的定义必须支配所有使用
+2. **类型一致性**: 操作数和结果类型必须匹配
+3. **SSA 形式**: 每个虚拟寄存器只定义一次
+4. **控制流完整性**: 基本块必须有正确的终止符
+
+```llvm
+; 错误示例：定义不支配使用
+%result = add i32 1, %x        ; 错误：%x 在此处未定义
+%x = add i32 %a, %b
+
+; 正确示例
+%x = add i32 %a, %b
+%result = add i32 1, %x        ; 正确：%x 已定义
+```

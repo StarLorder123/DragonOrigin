@@ -2,6 +2,12 @@
 
 All notable changes to the DragonOrigin knowledge base are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is organized by month, newest first.
 
+## [2026-11] - 2026-11-23
+
+### Added
+
+- **LLVM IR language reference** in `pages/LLVM编译器分析.md` — design goals, identifiers (`@` global / `%` local), the type system (integer, floating-point, aggregate, pointer and function types), constants (`undef`, `poison`, `null`), instruction examples (arithmetic/bitwise, memory, control flow with `phi`/`switch`, calls including `tail`/`musttail`), function definitions with attribute groups, a complete module example, and IR well-formedness rules (dominance, type consistency, SSA form, block terminators)
+
 ## [2026-11] - 2026-11-22
 
 ### Added
