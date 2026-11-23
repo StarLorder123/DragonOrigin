@@ -379,3 +379,30 @@ LLVM IR 有一些"良好形成"的要求：
 %x = add i32 %a, %b
 %result = add i32 1, %x        ; 正确：%x 已定义
 ```
+
+## LLVM 优化算法概述
+
+LLVM 的优化系统基于 **Pass** 的概念，每个 Pass 执行特定的优化任务。优化 Pass 分布在以下几个主要目录：
+
+| 目录 | 功能 | 典型 Pass |
+|------|------|-----------|
+| `llvm/lib/Transforms/Scalar` | 标量优化 | GVN, SCCP, DSE, LICM, SROA, EarlyCSE |
+| `llvm/lib/Transforms/Vectorize` | 向量化优化 | LoopVectorize, SLPVectorizer, LoadStoreVectorizer |
+| `llvm/lib/Transforms/IPO` | 过程间优化 | Inliner, GlobalOpt, GlobalDCE, FunctionAttrs |
+| `llvm/lib/Transforms/InstCombine` | 指令合并 | InstCombine |
+| `llvm/lib/Transforms/Utils` | 优化工具 | 各种辅助转换 |
+
+### 优化级别
+
+LLVM 支持多个优化级别（-O0 到 -O3, -Os, -Oz），每个级别启用不同的 Pass 组合：
+
+```
+-O0: 不优化（调试模式）
+-O1: 基础优化，减少编译时间
+-O2: 标准优化级别，平衡编译时间和性能
+-O3: 激进优化，最大化性能
+-Os: 优化代码大小
+-Oz: 最小化代码大小
+```
+
+

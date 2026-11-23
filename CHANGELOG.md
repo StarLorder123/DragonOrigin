@@ -2,6 +2,12 @@
 
 All notable changes to the DragonOrigin knowledge base are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is organized by month, newest first.
 
+## [2026-11] - 2026-11-24
+
+### Added
+
+- **LLVM optimization algorithm overview** in `pages/LLVM编译器分析.md` — the Pass-based optimization system, the `lib/Transforms` directory layout (Scalar, Vectorize, IPO, InstCombine, Utils) with representative passes, and the `-O0` to `-O3`/`-Os`/`-Oz` optimization levels
+
 ## [2026-11] - 2026-11-23
 
 ### Added
