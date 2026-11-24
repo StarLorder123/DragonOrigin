@@ -2,6 +2,12 @@
 
 All notable changes to the DragonOrigin knowledge base are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is organized by month, newest first.
 
+## [2026-11] - 2026-11-25
+
+### Added
+
+- **Pass manager architecture** in `pages/LLVM编译器分析.md` — the new Pass manager (NPM) with its key files (`PassBuilder.h`, `PassBuilder.cpp`, `PassBuilderPipelines.cpp`, `OptimizationLevel.h`), the `PassBuilder` class, `PipelineTuningOptions` flags (loop interleaving/vectorization/unrolling/interchange/fusion, SLP vectorization, function merging, inliner threshold), and the Module → CGSCC → Function → Loop pass execution hierarchy
+
 ## [2026-11] - 2026-11-24
 
 ### Added

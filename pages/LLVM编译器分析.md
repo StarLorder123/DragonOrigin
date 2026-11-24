@@ -405,4 +405,63 @@ LLVM 支持多个优化级别（-O0 到 -O3, -Os, -Oz），每个级别启用不
 -Oz: 最小化代码大小
 ```
 
+## Pass 管理器架构
 
+### 新 Pass 管理器 (New Pass Manager)
+
+LLVM 使用新 Pass 管理器（NPM）来组织和执行优化 Pass。核心类位于：
+
+**关键文件**:
+- `llvm/include/llvm/Passes/PassBuilder.h` - PassBuilder 头文件
+- `llvm/lib/Passes/PassBuilder.cpp` - PassBuilder 实现
+- `llvm/lib/Passes/PassBuilderPipelines.cpp` - 优化流水线定义
+- `llvm/include/llvm/Passes/OptimizationLevel.h` - 优化级别定义
+
+**文件**: `llvm/include/llvm/Passes/PassBuilder.h`
+
+```cpp
+class PassBuilder {
+  LLVMContext &Context;
+  const PassesOptions &Opts;
+  TargetMachine *TM;
+  PipelineTuningOptions PTO;
+  std::optional<PGOOptions> PGOOpt;
+  PassInstrumentationCallbacks *PIC;
+  // ...
+};
+```
+
+### PipelineTuningOptions 结构
+
+控制各种优化的开关：
+
+```cpp
+class PipelineTuningOptions {
+public:
+  bool LoopInterleaving = true;      // 循环交织
+  bool LoopVectorization = true;     // 循环向量化
+  bool SLPVectorization = false;     // SLP 向量化
+  bool LoopUnrolling = true;         // 循环展开
+  bool LoopInterchange = true;       // 循环交换
+  bool LoopFusion = false;           // 循环融合
+  bool MergeFunctions;               // 函数合并
+  int InlinerThreshold = -1;         // 内联阈值
+  // ...
+};
+```
+
+### Pass 执行流程
+
+```
+Module
+  ├─ ModulePass
+  │    └─ 处理整个模块
+  ├─ CGSCCPass (Call Graph SCC Pass)
+  │    └─ 处理调用图的强连通分量
+  │         └─ FunctionPass
+  │              └─ 处理单个函数
+  │                   ├─ LoopPass
+  │                   │    └─ 处理单个循环
+  │                   └─ 各种分析 Pass
+  └─ 各种模块级 Pass
+```
