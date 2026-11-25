@@ -2,6 +2,12 @@
 
 All notable changes to the DragonOrigin knowledge base are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is organized by month, newest first.
 
+## [2026-11] - 2026-11-26
+
+### Added
+
+- **Core optimization Pass deep-dive** in `pages/LLVM编译器分析.md` — InstCombine in `llvm/lib/Transforms/InstCombine/`: its design (worklist-driven instruction combining with before/after examples), canonicalization guarantees (constant operands to RHS, bit-op ordering, `add X, X` → `X << 1`, multiply-by-power-of-two → shift), the `InstCombiner` class with its visitor methods and worklist insertion helper, source `STATISTIC` counters, and a per-file breakdown (`InstCombineAddSub`, `AndOrXor`, `Calls`, `Casts`, `Compares`, `LoadStoreAlloca`, `MulDivRem`, `PHI`, `Select`, `Shifts`)
+
 ## [2026-11] - 2026-11-25
 
 ### Added

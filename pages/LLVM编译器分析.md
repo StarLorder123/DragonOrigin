@@ -465,3 +465,86 @@ Module
   │                   └─ 各种分析 Pass
   └─ 各种模块级 Pass
 ```
+
+## 核心优化 Pass 详解
+
+### 1. InstCombine（指令合并）
+
+**位置**: `llvm/lib/Transforms/InstCombine/`
+
+**功能**: 将指令合并为更简单或更标准的形式，消除冗余计算。这是 LLVM 中最重要的优化 Pass 之一。
+
+**设计原则**（来自源码注释）:
+```cpp
+// InstructionCombining.cpp 头部注释
+// This pass combines things like:
+//    %Y = add i32 %X, 1
+//    %Z = add i32 %Y, 1
+// into:
+//    %Z = add i32 %X, 2
+//
+// This is a simple worklist driven algorithm.
+```
+
+**规范化保证**:
+```cpp
+// 1. 二元运算符的常量操作数移到 RHS
+// 2. 位运算与常量：先移位，再 or，再 and，最后 xor
+// 3. 比较指令从 <,>,<=,>= 转换为 ==,!= (如果可能)
+// 4. 布尔值上的 cmp 转换为逻辑运算
+// 5. add X, X 表示为 (X*2) => (X << 1)
+// 6. 乘以 2 的幂转换为移位
+```
+
+**核心类**（源码对照）:
+```cpp
+// llvm/lib/Transforms/InstCombine/InstructionCombining.cpp
+
+class InstCombiner {
+  // 工作列表驱动的算法
+  InstructionWorklist Worklist;
+  
+  // 主入口 - 运行指令合并
+  bool run();
+  
+  // 访问者模式 - 各类指令的简化方法
+  Instruction *visitAdd(BinaryOperator &I);
+  Instruction *visitMul(BinaryOperator &I);
+  Instruction *visitCall(CallInst &I);
+  Instruction *visitPHI(PHINode &I);
+  Instruction *visitSelect(SelectInst &I);
+  // ...
+  
+  // 插入指令时自动添加到工作列表
+  void InsertHelper(Instruction *I, ...) {
+    Worklist.add(I);
+  }
+};
+```
+
+**统计信息**（源码）:
+```cpp
+STATISTIC(NumWorklistIterations, "Number of instruction combining iterations");
+STATISTIC(NumCombined, "Number of insts combined");
+STATISTIC(NumConstProp, "Number of constant folds");
+STATISTIC(NumDeadInst, "Number of dead inst eliminated");
+STATISTIC(NumSunkInst, "Number of instructions sunk");
+STATISTIC(NumExpand, "Number of expansions");
+STATISTIC(NumFactor, "Number of factorizations");
+STATISTIC(NumReassoc, "Number of reassociations");
+```
+
+**实现文件结构**:
+| 文件 | 功能 |
+|------|------|
+| `InstructionCombining.cpp` | 主入口，工作列表算法 |
+| `InstCombineAddSub.cpp` | 加减法优化：`(X+C1)+C2 => X+(C1+C2)` |
+| `InstCombineAndOrXor.cpp` | 位运算优化：`(X&Y)|(X&Z) => X&(Y|Z)` |
+| `InstCombineCalls.cpp` | 调用指令优化 |
+| `InstCombineCasts.cpp` | 类型转换优化：`trunc(sext(X)) => X` |
+| `InstCombineCompares.cpp` | 比较指令优化 |
+| `InstCombineLoadStoreAlloca.cpp` | 内存操作优化 |
+| `InstCombineMulDivRem.cpp` | 乘除法优化：`X*8 => X<<3` |
+| `InstCombinePHI.cpp` | PHI 节点优化 |
+| `InstCombineSelect.cpp` | select 优化：`sel(X>0, X, 0) => max(X, 0)` |
+| `InstCombineShifts.cpp` | 移位优化：`(X<<C1)>>C2 => X<<(C1-C2)` |
