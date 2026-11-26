@@ -548,3 +548,92 @@ STATISTIC(NumReassoc, "Number of reassociations");
 | `InstCombinePHI.cpp` | PHI 节点优化 |
 | `InstCombineSelect.cpp` | select 优化：`sel(X>0, X, 0) => max(X, 0)` |
 | `InstCombineShifts.cpp` | 移位优化：`(X<<C1)>>C2 => X<<(C1-C2)` |
+
+### 2. GVN（全局值编号）
+
+**位置**: `llvm/lib/Transforms/Scalar/GVN.cpp`
+
+**功能**: 消除完全冗余的指令，执行简单的死代码消除和部分冗余消除（PRE）。
+
+**核心数据结构**（源码对照）:
+```cpp
+// llvm/lib/Transforms/Scalar/GVN.cpp
+
+// 值编号表 - 为表达式分配唯一编号
+class GVNValueTable {
+  struct Expression {
+    uint32_t Opcode;
+    bool Commutative = false;
+    Type *Ty = nullptr;
+    SmallVector<uint32_t, 4> VarArgs;  // 操作数的值编号
+    AttributeList Attrs;
+    
+    bool operator==(const Expression &Other) const {
+      if (Opcode != Other.Opcode) return false;
+      if (Ty != Other.Ty) return false;
+      if (VarArgs != Other.VarArgs) return false;
+      // ...
+    }
+    
+    friend hash_code hash_value(const Expression &E) {
+      return hash_combine(E.Opcode, E.Ty, 
+                         hash_combine_range(E.VarArgs));
+    }
+  };
+  
+  DenseMap<Expression, uint32_t> ExpressionToValueNumber;
+};
+
+// 领导者表 - 记录每个值编号对应的值
+class GVNLeaderMap {
+  struct LeaderTableEntry {
+    AssertingVH<Value> Val;
+    const BasicBlock *BB;
+  };
+  
+  // 值编号 -> 领导者列表
+  DenseMap<uint32_t, LeaderListNode> NumToLeaders;
+};
+```
+
+**统计信息**（源码）:
+```cpp
+STATISTIC(NumGVNInstr, "Number of instructions deleted");
+STATISTIC(NumGVNLoad, "Number of loads deleted");
+STATISTIC(NumGVNPRE, "Number of instructions PRE'd");
+STATISTIC(NumGVNBlocks, "Number of blocks merged");
+STATISTIC(NumGVNSimpl, "Number of instructions simplified");
+STATISTIC(NumGVNEqProp, "Number of equalities propagated");
+STATISTIC(NumPRELoad, "Number of loads PRE'd");
+```
+
+**GVNPass 核心实现**（源码）:
+```cpp
+class GVNPassImpl {
+  // 值编号表
+  GVNValueTable VN;
+  
+  // 领导者映射
+  GVNLeaderMap LeaderMap;
+  
+  // 执行 GVN
+  bool runGVN(Function &F) {
+    // 1. 为每条指令计算值编号
+    // 2. 查找已有的领导者
+    // 3. 如果找到相同的值编号，用领导者替换
+    // 4. 否则，添加新的领导者
+  }
+  
+  // 检查值是否在块中完全可用
+  bool isValueFullyAvailableInBlock(Value *V, BasicBlock *BB);
+  
+  // PRE: 部分冗余消除
+  bool performPRE(Function &F);
+};
+```
+
+**关键依赖**:
+- `MemoryDependenceAnalysis`: 内存依赖分析
+- `AliasAnalysis`: 别名分析
+- `DominatorTree`: 支配树
+- `TargetLibraryInfo`: 目标库信息

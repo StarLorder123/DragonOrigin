@@ -2,6 +2,12 @@
 
 All notable changes to the DragonOrigin knowledge base are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is organized by month, newest first.
 
+## [2026-11] - 2026-11-27
+
+### Added
+
+- **GVN (Global Value Numbering) pass** in `pages/LLVM编译器分析.md` — `llvm/lib/Transforms/Scalar/GVN.cpp`: redundant-instruction elimination with simple DCE and partial redundancy elimination (PRE), the value-numbering table (`GVNValueTable` with its `Expression` keys and hashing) and leader map (`GVNLeaderMap`), source `STATISTIC` counters, the `GVNPassImpl` core algorithm, and its dependencies (MemoryDependenceAnalysis, AliasAnalysis, DominatorTree, TargetLibraryInfo)
+
 ## [2026-11] - 2026-11-26
 
 ### Added
