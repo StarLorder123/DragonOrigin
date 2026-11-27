@@ -2,6 +2,14 @@
 
 All notable changes to the DragonOrigin knowledge base are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and is organized by month, newest first.
 
+## [2026-11] - 2026-11-28
+
+### Added
+
+- **SCCP (Sparse Conditional Constant Propagation)** in `pages/LLVM编译器分析.md` — `llvm/lib/Transforms/Scalar/SCCP.cpp`: the sparse dataflow lattice (`Undefined`/`Constant`/`Overdefined`), the fixed-point `runSCCP` driver, the `SCCPSolver` operations, unreachable-block handling, and its `STATISTIC` counters
+- **DSE (Dead Store Elimination)** in `pages/LLVM编译器分析.md` — `llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp`: MemorySSA-based elimination algorithm, the `OverwriteResult` enum, source `STATISTIC` counters, and dependencies (MemorySSA, AliasAnalysis, PostDominators, MustExecute)
+- **LoopVectorize** in `pages/LLVM编译器分析.md` — `llvm/lib/Transforms/Vectorize/LoopVectorize.cpp`: the four-part architecture (main pass, Legality, Planner/VPlan, CostModel), the `LoopVectorizePass` flow (legality → cost → plan → execute), vectorization-factor selection via target cost model, `STATISTIC` counters, and reference papers
+
 ## [2026-11] - 2026-11-27
 
 ### Added

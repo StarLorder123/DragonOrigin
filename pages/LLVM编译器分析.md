@@ -637,3 +637,247 @@ class GVNPassImpl {
 - `AliasAnalysis`: 别名分析
 - `DominatorTree`: 支配树
 - `TargetLibraryInfo`: 目标库信息
+
+### 3. SCCP（稀疏条件常量传播）
+
+**位置**: `llvm/lib/Transforms/Scalar/SCCP.cpp`
+
+**功能**: 假设值为常量，除非证明 otherwise；假设基本块不可达，除非证明 otherwise。
+
+**核心算法**（源码对照）:
+```cpp
+// llvm/lib/Transforms/Scalar/SCCP.cpp
+
+static bool runSCCP(Function &F, const DataLayout &DL,
+                    const TargetLibraryInfo *TLI, 
+                    DominatorTree &DT, AssumptionCache &AC) {
+  SCCPSolver Solver(DL, ...);
+  
+  // 添加谓词信息（用于更精确的分析）
+  Solver.addPredicateInfo(F, DT, AC);
+  
+  // 标记函数入口块可达
+  Solver.markBlockExecutable(&F.front());
+  
+  // 跟踪参数值（基于属性）
+  for (Argument &AI : F.args())
+    Solver.trackValueOfArgument(&AI);
+  
+  // 求解直到不动点
+  bool ResolvedUndefs = true;
+  while (ResolvedUndefs) {
+    Solver.solve();
+    ResolvedUndefs = Solver.resolvedUndefsIn(F);
+  }
+  
+  // 应用结果
+  for (BasicBlock &BB : F) {
+    if (!Solver.isBlockExecutable(&BB)) {
+      // 将不可达块转为 unreachable
+      changeToUnreachable(&*BB.getFirstNonPHIIt(), ...);
+    }
+  }
+  
+  // 移除不可达块
+  for (BasicBlock *DeadBB : BlocksToErase)
+    DTU.deleteBB(DeadBB);
+}
+```
+
+**SCCPSolver 核心逻辑**:
+```cpp
+class SCCPSolver {
+  // 值的状态
+  enum LatticeState {
+    Undefined,    // 未定义（初始状态）
+    Constant,     // 已知常量
+    Overdefined   // 非常量（多个可能值）
+  };
+  
+  // 值格
+  DenseMap<Value*, LatticeVal> StateMap;
+  
+  // 可执行块集合
+  SmallPtrSet<BasicBlock*, 16> ExecutableBlocks;
+  
+  // 核心操作
+  void markBlockExecutable(BasicBlock *BB);
+  void markConstant(Value *V, Constant *C);
+  void markOverdefined(Value *V);
+  
+  // 获取格的值
+  LatticeVal getLatticeValue(Value *V);
+};
+```
+
+**统计**:
+```cpp
+STATISTIC(NumInstRemoved, "Number of instructions removed");
+STATISTIC(NumDeadBlocks, "Number of basic blocks unreachable");
+STATISTIC(NumInstReplaced, "Number of instructions replaced");
+```
+
+### 4. DSE（死存储消除）
+
+**位置**: `llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp`
+
+**功能**: 基于 MemorySSA 消除不会被读取的存储。
+
+**核心算法**（源码注释）:
+```cpp
+// DeadStoreElimination.cpp 头部注释
+// The code below implements dead store elimination using MemorySSA.
+//
+// For all MemoryDefs StartDef:
+// 1. Get the next dominating clobbering MemoryDef (MaybeDeadAccess)
+// 2. Check that there are no reads between MaybeDeadAccess and StartDef
+// 3. For each found CurrentDef, check:
+//    a. No barrier instructions between CurrentDef and StartDef
+//    b. StartDef is executed whenever CurrentDef is executed
+//    c. StartDef completely overwrites CurrentDef
+// 4. Erase CurrentDef from the function and MemorySSA
+```
+
+**覆盖结果枚举**（源码）:
+```cpp
+enum OverwriteResult {
+  OW_Begin,                        // 部分覆盖（开头）
+  OW_Complete,                     // 完全覆盖
+  OW_End,                          // 部分覆盖（结尾）
+  OW_PartialEarlierWithFullLater,  // 部分覆盖
+  OW_MaybePartial,                 // 可能部分覆盖
+  OW_None,                         // 无覆盖
+  OW_Unknown                       // 未知
+};
+```
+
+**统计**（源码）:
+```cpp
+STATISTIC(NumRemainingStores, "Number of stores remaining after DSE");
+STATISTIC(NumRedundantStores, "Number of redundant stores deleted");
+STATISTIC(NumFastStores, "Number of stores deleted");
+STATISTIC(NumCompletePartials, "Number of stores dead by later partials");
+STATISTIC(NumModifiedStores, "Number of stores modified");
+STATISTIC(NumGetDomMemoryDefPassed, "Number of valid candidates");
+STATISTIC(NumDomMemDefChecks, "Number of iterations in getDomMemoryDef");
+```
+
+**关键依赖**:
+- `MemorySSA`: 内存静态单赋值形式
+- `AliasAnalysis`: 别名分析
+- `PostDominators`: 后支配树
+- `MustExecute`: 必须执行分析
+
+### 5. LoopVectorize（循环向量化）
+
+**位置**: `llvm/lib/Transforms/Vectorize/LoopVectorize.cpp`
+
+**功能**: 将循环的连续迭代合并为单次"宽"迭代，使用 SIMD 指令。
+
+**源码注释**（设计说明）:
+```cpp
+// LoopVectorize.cpp 头部注释
+// This is the LLVM loop vectorizer. This pass modifies 'vectorizable' loops
+// and generates target-independent LLVM-IR.
+// The vectorizer uses the TargetTransformInfo analysis to estimate the costs
+// of instructions in order to estimate the profitability of vectorization.
+//
+// The loop vectorizer combines consecutive loop iterations into a single
+// 'wide' iteration. After this transformation the index is incremented
+// by the SIMD vector width, and not by one.
+//
+// This pass has four parts:
+// 1. The main loop pass that drives the different parts.
+// 2. LoopVectorizationLegality - A unit that checks for the legality
+//    of the vectorization.
+// 3. LoopVectorizationPlanner - A unit that builds VPlans for the candidate
+//    vectorization factors, selects the best one and executes it.
+// 4. LoopVectorizationCostModel - A unit that checks for the profitability
+//    of vectorization.
+```
+
+**统计信息**（源码）:
+```cpp
+STATISTIC(LoopsVectorized, "Number of loops vectorized");
+STATISTIC(LoopsAnalyzed, "Number of loops analyzed for vectorization");
+STATISTIC(LoopsEpilogueVectorized, "Number of epilogues vectorized");
+STATISTIC(LoopsEarlyExitVectorized, "Number of early exit loops vectorized");
+STATISTIC(LoopsPartialAliasVectorized, 
+          "Number of partial aliasing loops vectorized");
+```
+
+**架构**（四个主要部分）:
+
+```
+LoopVectorize Pass
+├─ LoopVectorizationLegality    // 检查向量化合法性
+├─ LoopVectorizationPlanner     // 构建 VPlan，选择最优方案
+├─ LoopVectorizationCostModel   // 评估向量化收益
+└─ VPlan Infrastructure         // 向量化计划基础设施
+```
+
+**关键类**（源码对照）:
+```cpp
+// 主 Pass
+class LoopVectorizePass : public PassInfoMixin<LoopVectorizePass> {
+  // 运行向量化
+  PreservedAnalyses run(Loop *L, LoopAnalysisManager &AM, ...) {
+    // 1. 检查合法性
+    LoopVectorizationLegality LVL(L, ...);
+    if (!LVL.canVectorize()) return PreservedAnalyses::all();
+    
+    // 2. 评估成本
+    LoopVectorizationCostModel CM(L, ...);
+    unsigned VF = CM.selectVectorizationFactor();
+    if (VF == 1) return PreservedAnalyses::all();  // 不向量化
+    
+    // 3. 构建并执行计划
+    LoopVectorizationPlanner Planner(L, ...);
+    Planner.plan(VF);
+    Planner.execute();
+    
+    return PreservedAnalyses::none();
+  }
+};
+
+// 合法性检查
+class LoopVectorizationLegality {
+  // 检查循环是否可以向量化
+  bool canVectorize() {
+    // 检查条件：
+    // - 循环有已知的.trip count
+    // - 没有不可向量化的指令
+    // - 内存访问可以分析
+    // - 没有复杂的控制流
+    return hasKnownTripCount() && 
+           allInstructionsVectorizable() &&
+           canAnalyzeMemoryAccesses();
+  }
+};
+
+// 成本模型
+class LoopVectorizationCostModel {
+  // 计算向量化成本
+  InstructionCost getInstructionCost(Instruction *I) {
+    // 使用 TTI 获取目标特定的成本
+    return TTI.getInstructionCost(I, TTI.TCK_RecipThroughput);
+  }
+  
+  // 选择最优向量宽度
+  unsigned selectVectorizationFactor() {
+    // 尝试不同的 VF（2, 4, 8, ...）
+    // 选择成本最低的
+    for (unsigned VF = MaxVF; VF >= 2; VF /= 2) {
+      Cost = calculateCost(VF);
+      if (Cost < BestCost) BestVF = VF;
+    }
+    return BestVF;
+  }
+};
+```
+
+**参考论文**:
+- D. Nuzman and R. Henderson. *Multi-platform Auto-vectorization*
+- Karrenberg, R. and Hack, S. *Whole Function Vectorization*
+- Dorit Nuzman, Ira Rosen and Ayal Zaks. *Auto-Vectorization of Interleaved Data for SIMD*
+
