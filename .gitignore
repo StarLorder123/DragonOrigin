@@ -1,5 +1,6 @@
-# Logseq auto-generated backups
-logseq/bak/
-
 # macOS metadata
 .DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini

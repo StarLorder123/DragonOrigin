@@ -1,0 +1,4864 @@
+# 1.  VSCode简要介绍
+- ## 1.1.  简要介绍
+  
+  ![](../../assets/VSCode解析/001_1695532980574-1471cc1e-b413-47a7-9487-163d6e481070.png)
+- Visual Studio Code(简称VSCode) 是开源免费的IDE编辑器，原本是微软内部使用的云编辑器(Monaco)。
+- VSCode项目的负责人是Erich Gamma，也是曾经Eclipse的架构师，《设计模式》经典书籍的作者。他于2011年加入微软，在瑞士苏黎世组建团队开发基于Web技术的编辑器，也就是后来的Monaco-editor。从定位上来看，VSCode是一个大型的客户端APP项目。涉及的技术包含**Electron、TypeScript、Monaco、XTerm、LSP（Language Server Protocol）、DAP（Debug Adapter Protocol）。**
+- VSCode的时间线：
+	- 2015.04.29 第一个预览版本
+	- 2015.11      开源
+	- 2016.4.14   正式发布1.0版本
+	- 2018           成为最受欢迎的开发工具
+	- 2019.05.02  发布VSCode Remote Development
+- ## 1.2.  小结
+- 从定位上来看，VSCode是通过代码编辑器+一系列对应的插件组成最终的开发IDE，因此具有一定的门槛。和IDEA系列相比，IDEA更加具有集成性，只需要安装一个软件就可以进行编码，无需关心插件问题。
+- # 2.  计算机基础
+- ## 2.1.  网络协议升级
+- ### 2.1.1.  升级过程描述
+- HTTP/1.1 协议提供了一种使用 Upgrade 标头字段的特殊机制，这一机制允许将一个已建立的连接升级成新的、不相容的协议。
+- 客户端使用 Upgrade 标头字段请求服务器，以降序优先的顺序切换到其中列出的一个协议。
+- 因为 Upgrade 是一个逐跳（Hop-by-hop）标头，它还需要在 Connection 标头字段中列出。这意味着包含 Upgrade 的典型请求类似于：
+  
+  ```
+  GET /index.html HTTP/1.1
+  Host: www.example.com
+  Connection: upgrade
+  Upgrade: example/1, foo/2
+  ```
+- 根据之前的请求的协议，可能需要其他标头信息，例如：从 HTTP/1.1 升级到 WebSocket 允许配置有关 WebSocket 连接的标头详细信息，以及在连接时提供一定程度的安全性。查看升级到 WebSocket 协议的连接获取更多信息。
+- 如果服务器决定升级这次连接，就会返回一个 101 Switching Protocols 响应状态码，和一个要切换到的协议的标头字段 Upgrade。如果服务器没有（或者不能）升级这次连接，它会忽略客户端发送的 Upgrade 标头字段，返回一个常规的响应：例如一个 200 OK).
+- 在发送 101 状态码之后，服务器可以使用新协议，并根据需要执行任何额外的特定于协议的握手。实际上，一旦这次升级完成了，连接就变成了双向管道。并且可以通过新协议完成启动升级的请求。
+- 至今为止，最经常会需要升级一个 HTTP 连接的场合就是使用 WebSocket，它总是通过升级 HTTP 或 HTTPS 连接来实现。请记住，当你用 WebSocket API 以及其他大部分实现 WebSocket 的库去建立新的连接时，基本上都不用操心升级的过程，因为这些 API 已经实现了这一步。
+- ### 2.1.2.  协议升级示例
+- 使用java语言实现一个http协议升级到websocket协议的服务器
+- ```
+  import java.io.*;
+  import java.net.*;
+  import java.nio.charset.StandardCharsets;
+  import java.security.MessageDigest;
+  import java.util.Base64;
+  
+  public class UpgradeServer {
+  
+      public static void main(String[] args) throws Exception {
+          ServerSocket serverSocket = new ServerSocket(8080);
+          System.out.println("Server is listening on port 8080...");
+  
+          while (true) {
+              Socket clientSocket = serverSocket.accept();
+              new Thread(() -> handleClient(clientSocket)).start();
+          }
+      }
+  
+      public static void handleClient(Socket clientSocket) {
+          try (BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+               OutputStream out = clientSocket.getOutputStream()) {
+  
+              // 1. 读取并解析客户端的 HTTP 请求
+              String line;
+              StringBuilder request = new StringBuilder();
+              while (!(line = reader.readLine()).isEmpty()) {
+                  request.append(line).append("\n");
+              }
+  
+              // 打印 HTTP 请求
+              System.out.println("Received Request: \n" + request);
+  
+              // 2. 检查是否是 WebSocket 升级请求
+              if (request.toString().contains("Upgrade: websocket")) {
+                  // 3. 获取 Sec-WebSocket-Key，并生成 Sec-WebSocket-Accept 响应
+                  String secWebSocketKey = getSecWebSocketKey(request.toString());
+                  String secWebSocketAccept = generateWebSocketAcceptKey(secWebSocketKey);
+  
+                  // 4. 响应 HTTP 101 协议升级
+                  String response = "HTTP/1.1 101 Switching Protocols\r\n" +
+                                    "Upgrade: websocket\r\n" +
+                                    "Connection: Upgrade\r\n" +
+                                    "Sec-WebSocket-Accept: " + secWebSocketAccept + "\r\n\r\n";
+  
+                  out.write(response.getBytes(StandardCharsets.UTF_8));
+                  out.flush();
+  
+                  System.out.println("Protocol upgraded to WebSocket!");
+  
+                  // 5. 开始处理 WebSocket 帧（这里只是简单的例子，没有完整实现）
+                  // 实际上你需要根据 WebSocket 帧的格式来读取和写入数据。
+                  // 比如通过掩码解码数据帧，处理数据帧等。
+  
+              } else {
+                  // 非 WebSocket 升级请求，响应简单的 HTTP 请求
+                  String httpResponse = "HTTP/1.1 200 OK\r\n\r\nHello, HTTP client!";
+                  out.write(httpResponse.getBytes(StandardCharsets.UTF_8));
+              }
+          } catch (IOException e) {
+              e.printStackTrace();
+          }
+      }
+  
+      // 获取 Sec-WebSocket-Key
+      public static String getSecWebSocketKey(String request) {
+          for (String line : request.split("\n")) {
+              if (line.startsWith("Sec-WebSocket-Key:")) {
+                  return line.split(":")[1].trim();
+              }
+          }
+          return null;
+      }
+  
+      // 生成 Sec-WebSocket-Accept
+      public static String generateWebSocketAcceptKey(String secWebSocketKey) throws Exception {
+          String magicString = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+          String acceptKey = secWebSocketKey + magicString;
+          MessageDigest md = MessageDigest.getInstance("SHA-1");
+          byte[] hash = md.digest(acceptKey.getBytes(StandardCharsets.UTF_8));
+          return Base64.getEncoder().encodeToString(hash);
+      }
+  }
+  ```
+- java+netty实现一个协议升级的服务器
+  
+  ```
+  import io.netty.bootstrap.ServerBootstrap;
+  import io.netty.channel.*;
+  import io.netty.channel.nio.NioEventLoopGroup;
+  import io.netty.channel.socket.SocketChannel;
+  import io.netty.channel.socket.nio.NioServerSocketChannel;
+  import io.netty.handler.codec.http.*;
+  import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
+  import io.netty.handler.stream.ChunkedWriteHandler;
+  
+  public class NettyWebSocketServer {
+  
+    private final int port;
+  
+    public NettyWebSocketServer(int port) {
+        this.port = port;
+    }
+  
+    public void start() throws Exception {
+        EventLoopGroup bossGroup = new NioEventLoopGroup();
+        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        try {
+            ServerBootstrap bootstrap = new ServerBootstrap()
+                    .group(bossGroup, workerGroup)
+                    .channel(NioServerSocketChannel.class)
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel ch) {
+                            ChannelPipeline pipeline = ch.pipeline();
+                            pipeline.addLast(new HttpServerCodec());
+                            pipeline.addLast(new HttpObjectAggregator(65536));
+                            pipeline.addLast(new ChunkedWriteHandler());
+                            pipeline.addLast(new WebSocketServerProtocolHandler("/ws"));
+                            pipeline.addLast(new WebSocketFrameHandler());
+                        }
+                    });
+  
+            Channel ch = bootstrap.bind(port).sync().channel();
+            System.out.println("WebSocket server started on port " + port);
+            ch.closeFuture().sync();
+        } finally {
+            bossGroup.shutdownGracefully();
+            workerGroup.shutdownGracefully();
+        }
+    }
+  
+    public static void main(String[] args) throws Exception {
+        new NettyWebSocketServer(8080).start();
+    }
+  
+    private static class WebSocketFrameHandler extends SimpleChannelInboundHandler<Object> {
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
+            if (msg instanceof FullHttpRequest) {
+                // 处理 HTTP 请求升级
+                System.out.println("Received HTTP request, upgrading to WebSocket...");
+            } else if (msg instanceof WebSocketFrame) {
+                // 处理 WebSocket 数据帧
+                System.out.println("Received WebSocket frame");
+            }
+        }
+    }
+  }
+  ```
+- 在nodejs中的net创建的server中绑定一个upgrade事件，这就是在协议升级的时候触发的。
+- ### 2.1.3.  协议升级的应用场景
+- 通常使用的场景都是HTTP协议升级到WebSocket的场景。一般考虑的因素有如下：
+	- WebSocket 是基于 HTTP 的协议升级。WebSocket 是设计为在初始阶段通过 HTTP/1.1 或 HTTP/2 握手来建立连接的协议。这种设计使得 WebSocket 能够利用现有的 HTTP 基础设施进行连接，并在握手完成后切换到全双工通信模式。由于 WebSocket 是基于 HTTP 的，这意味着它可以更容易地通过现有的防火墙、代理和其他网络设备，而这些设备普遍支持 HTTP。这里就是考虑网络设备的兼容性、设备防火墙、代理服务器等等因素。
+	- 逐步回退机制。在某些情况下，WebSocket 可能无法通过特定的网络设备或防火墙，这时应用可以有回退机制。例如，应用可以首先尝试升级为 WebSocket，如果失败则可以回退到较为传统的轮询或长轮询的 HTTP 技术。通过 HTTP 开始连接，允许应用具备这种灵活性。
+- ## 2.2.  SSH的使用
+- 为了讲解的简单，我只讲解 “端口” 的转发。实际上，Unix Socket 也可以用相同的方式转发，请参考 Man Page。[https://man7.org/linux/man-pages/man1/ssh.1.html](https://man7.org/linux/man-pages/man1/ssh.1.html)
+- -D 动态转发
+  
+  ```
+  -D [_bind_address :_ ] _port_
+  ```
+	- 指定一个本地的动态应用级端口转发。
+	- 其工作方式是在本地分配一个 Socket 来监听端口，每当连接到这个端口时，连接通过 SSH 隧道被转发到远程主机上，然后远程主机根据协议确定该数据被转发到哪里。此时 SSH 充当 SOCKS 代理服务器。
+- -L 本地转发
+  
+  ```
+  -L [bind_address : ] port : host : hostport
+  -L [bind_address : ] port : remote_socket
+  -L local_socket : host : hostport
+  -L local_socket : remote_socket
+  ```
+	- 指定本地主机上给定的 TCP 端口或 Unix 套接字的连接将被转发到远程的给定主机和端口或 Unix 套接字上。
+	- 其工作方式是在本地分配一个 Socket 来监听本地的端口。每当连接到本地端口时，数据通过 SSH 隧道，被转发到远程主机的指定端口。
+	- 区分 -D 和 -L：本地转发中，数据被转发到指定端口，而动态转发根据协议内容自动确定数据去向。
+- -R 远程转发
+  
+  ```
+  -R [bind_address : ] port : host : hostport
+  -R [bind_address : ] port : local_socket
+  -R remote_socket : host : hostport
+  -R remote_socket : local_socket
+  ```
+	- 指定将远程（服务器）主机上给定 TCP 端口或 Unix 套接字的连接转发到本地端给定的主机和端口或 Unix 套接字。
+	- 其工作方式是远程主机上分配一个 Socket 监听远程的端口。每当连接到远程端口时，数据通过 SSH 隧道，被发送到本地主机的指定端口。
+- 区分 -L 和 -R：-L 是别人向本地发数据，数据会被转发到远程的特定端口；-R 是别人往远程发数据，数据会被转发到本地的特定端口。数据流向恰好相反。
+- 对于转发而言，还有几个选项比较有用：
+  
+  ```
+  -C: 使用数据压缩。
+  -f: 让 SSH 在后台运行，STDIN 会被重定向到 /dev/null。
+  -N: 让 SSH 不执行远程命令，即只负责转发端口。
+  ```
+- 所以一个常见的命令组合就可以是：
+  
+  ```
+  ssh -CNf -D 12345 user@IP
+  ```
+- ### 2.2.1.  关键方法解析
+- forwardOut方法
+	- 通过 SSH 隧道将本地机器的请求转发到远程服务器的某个端口，并模拟一个 HTTP 请求发送给远程服务器上的服务。
+	- 通常，它用于实现本地端口转发（Local Port Forwarding），也可以作为代理来连接到另一个服务器的地址和端口。
+	  
+	  ```
+	  conn.forwardOut(
+	  srcIP,         // 本地发起连接的 IP 地址
+	  srcPort,       // 本地发起连接的端口
+	  dstIP,         // 目标远程服务器的 IP 地址
+	  dstPort,       // 目标远程服务器的端口
+	  (err, stream) => {
+	   if (err) {
+	     console.log('Error forwarding:', err);
+	     return;
+	   }
+	  
+	   // stream 对象可以用于读写数据
+	   stream.write('Some data to send');
+	   stream.on('data', (data) => {
+	     console.log('Received data:', data);
+	   });
+	  }
+	  );
+	  ```
+- srcIP: 本地机器发起连接的 IP 地址，通常是 '127.0.0.1' 或 'localhost'。
+- srcPort: 本地发起连接的端口，通常是 0（表示任意端口）。
+- dstIP: 目标远程服务器的 IP 地址或主机名，这是你想要连接的目标地址。可以是 'localhost'，也可以是远程服务器的 IP 地址。
+- dstPort: 目标服务器的端口号，这是你希望转发到的远程服务器的端口。
+- callback: 回调函数，接收两个参数：
+	- err: 如果发生错误，将返回错误对象。
+	- stream: 一个 stream 对象，可以用于与目标服务器交换数据。
+- forwardIn方法
+	- 远程端口监听：通过 SSH 连接，远程服务器上的某个指定端口开始监听外部连接。将请求转发到本地：当远程服务器上的这个端口接收到请求时，SSH 隧道会将这些请求转发到本地机器。远程服务代理：可以让远程机器上的服务通过 SSH 隧道连接到本地机器的服务，起到代理作用。
+	  
+	  ```
+	  const { Client } = require('ssh2');
+	  
+	  const conn = new Client();
+	  conn.on('ready', () => {
+	  console.log('Client :: ready');
+	  
+	  // 监听远程服务器上的 8080 端口，并将流量转发到本地
+	  conn.forwardIn('0.0.0.0', 8080, (err, port) => {
+	   if (err) throw err;
+	   console.log(`Listening for connections on remote server at port ${port}`);
+	  });
+	  }).on('tcp connection', (details, accept, reject) => {
+	  console.log('Incoming TCP connection:', details);
+	  const stream = accept();
+	  stream.write('Hello from local machine!\n');
+	  stream.end();
+	  }).connect({
+	  host: 'remote-server.com',
+	  port: 22,
+	  username: 'user',
+	  password: 'password'
+	  });
+	  ```
+- conn.forwardIn('0.0.0.0', 8080, ...)：
+	- 这个方法告诉远程服务器在其 所有网络接口（0.0.0.0） 的 8080 端口上监听连接。
+	- 当远程服务器上的 8080 端口接收到请求时，这些请求会通过 SSH 隧道转发到本地。
+- tcp connection 事件：
+	- 当远程服务器的 8080 端口接收到连接时，ssh2 会触发 tcp connection 事件。这个事件的回调函数中包含请求连接的细节（如来源 IP 和端口）。
+	- 在回调中，调用 accept() 接受连接，然后可以像操作本地 stream 一样处理远程的 TCP 流。
+- 消息处理：
+	- 远程端口接收到的请求被接受后，流量会通过 SSH 隧道传递到本地。在这个例子中，服务器接收到连接后，会向连接返回一条消息 "Hello from local machine!"，然后关闭连接。
+- openssh_forwardOutStreamLocal方法
+	- 通过 SSH 隧道，将来自本地的 UNIX 套接字流转发到远程服务器的一个指定的 UNIX 套接字文件上。
+	- 允许你通过 SSH 来与远程服务器的 UNIX 套接字通信，就像是在本地访问一样。
+	  
+	  ```
+	  const { Client } = require('ssh2');
+	  
+	  const conn = new Client();
+	  conn.on('ready', () => {
+	  console.log('Client :: ready');
+	  
+	  // 转发本地 UNIX 套接字流
+	  conn.openssh_forwardOutStreamLocal('/var/run/myservice.sock', (err, stream) => {
+	   if (err) throw err;
+	  
+	   // 当成功连接远程 UNIX 套接字时，可以通过 stream 进行通信
+	   stream.on('close', () => {
+	     console.log('Stream :: close');
+	     conn.end(); // 关闭 SSH 连接
+	   }).on('data', (data) => {
+	     console.log('DATA: ' + data);
+	   });
+	  
+	   // 向远程服务发送一些数据
+	   stream.write('Hello remote service!');
+	  });
+	  
+	  }).connect({
+	  host: 'remote-server.com',
+	  port: 22,
+	  username: 'user',
+	  password: 'password'
+	  });
+	  ```
+- conn.openssh_forwardOutStreamLocal('/var/run/myservice.sock', ...)：
+	- 该方法尝试通过 SSH 隧道连接远程服务器上的 UNIX 套接字 /var/run/myservice.sock。
+	- 当连接成功后，回调函数会返回一个 stream 对象，通过它你可以向远程套接字服务发送数据或接收数据。
+- stream.write() 和 stream.on('data')：
+	- stream.write() 允许你向远程服务发送数据。
+	- stream.on('data') 监听远程服务发送回来的数据，并在控制台打印出来。
+- 关闭连接：
+	- 当数据传输结束后，调用 stream.on('close') 来处理流关闭事件，并最终关闭 SSH 连接。
+- ## 2.3.  Socket
+- ### 2.3.1.  sock
+- 网络传输，从操作上来看，无非就是，发数据和远端之间互相收发数据。也就是对应着写数据和读数据。
+- 这里还有两个问题。
+	- 第一个是，接收端和发送端可能不止一个，因此我们需要一些信息做下区分，这个大家肯定很熟悉，可以用IP和端口。IP用来定位是哪台电脑，端口用来定位是这台电脑上的哪个进程。
+	- 第二个是，发送端和接收端的传输方式有很多区别，可以是可靠的TCP协议，也可以是不可靠的UDP协议，甚至还需要支持基于icmp协议的ping命令。
+	  
+	  ![](../../assets/VSCode解析/002_1728896433685-b7173605-0823-4baa-a5c1-e5a131619adc.png)
+- 为了支持这些功能，我们需要定义一个数据结构去支持这些功能。
+- 这个数据结构，叫sock。
+- 首先，可以在sock里加入IP和端口字段。这样解决了第一个问题
+- 第二个问题，我们会发现这些协议虽然各不相同，但还是有一些功能相似的地方，比如收发数据时的一些逻辑完全可以复用。按面向对象编程的思想，我们可以将不同的协议当成是不同的对象类（或结构体），将公共的部分提取出来，通过"继承"的方式，复用功能。
+- ### 2.3.2.  基于sock实现网络传输功能
+- 于是，我们将功能重新划分下，定义了一些数据结构。
+  
+  ![](../../assets/VSCode解析/003_1728896642227-b2256a65-8e5d-44ae-9b91-2dc3634e941d.png)
+- sock是最基础的结构，维护一些任何协议都有可能会用到的收发数据缓冲区。
+- inet_sock特指用了网络传输功能的sock，在sock的基础上还加入了TTL，端口，IP地址这些跟网络传输相关的字段信息。
+- inet_connection_sock 是指面向连接的sock，在inet_sock的基础上加入面向连接的协议里相关字段，比如accept队列，数据包分片大小，握手失败重试次数等。虽然我们现在提到面向连接的协议就是指TCP，但设计上linux需要支持扩展其他面向连接的新协议，
+- tcp_sock 就是正儿八经的tcp协议专用的sock结构了，在inet_connection_sock基础上还加入了tcp特有的滑动窗口、拥塞避免等功能。同样udp协议也会有一个专用的数据结构，叫udp_sock。
+- ### 2.3.3.  提供socket层
+- 可以想象得到，这里面的代码肯定非常复杂，同时还操作了网卡硬件，需要比较高的操作系统权限，再考虑到性能和安全，于是决定将它放在操作系统内核里。我们将这部分功能抽象成一个个简单的接口。以后别人只需要调用这些接口，就可以驱动我们写好的这一大堆复杂的数据结构去发送数据。
+- 既然跟远端服务端进程收发数据可以抽象为“读和写”，操作文件也可以抽象为"读和写"，正好有句话叫，"linux里一切皆是文件"，那我们索性，将内核的sock封装成文件就好了。创建sock的同时也创建一个文件，文件有个句柄fd，说白了就是个文件系统里的身份证号码，通过它可以唯一确定是哪个sock。
+  
+  这个文件句柄fd其实就是 sock_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) 里的sock_fd。
+- 将句柄暴露给用户，之后用户就可以像操作文件句柄那样去操作这个sock句柄。在用户空间里操作这个句柄，文件系统就会将操作指向内核sock结构。
+  
+  ![](../../assets/VSCode解析/004_1728896949760-dac6002a-bd1b-496f-bc9c-59754f85f978.png)
+- 有了sock_fd句柄之后，我们就需要提供一些接口方法，让用户更方便的实现特定的网络编程功能。这些接口，我们列了一下，发现需要有send()，recv()，bind(), listen()，connect()这些。到这里，我们的内核网络传输功能就算设计完成了。
+- socket其实就是个代码库 or 接口层，它介于内核和应用程序之间，提供了一些高度封装过的接口，让我们去使用内核网络传输功能。
+- 平时写的应用程序里代码里虽然用了socket实现了收发数据包的功能，但其实真正执行网络通信功能的，不是应用程序，而是linux内核。相当于应用程序通过socket提供的接口，将网络传输的这部分工作外包给了linux内核。
+- 这听起来像不像我们最熟悉的前后端分离的服务架构，虽然这么说不太严谨，但看上去linux就像是被分成了应用程序和内核两个服务。内核就像是后端，暴露了好多个api接口，其中一类就是socket的send()和recv()这些方法。应用程序就像是前端，负责调用内核提供的接口来实现想要的功能。
+  
+  ![](../../assets/VSCode解析/005_1728897008070-28f7d58c-4c7c-4b1a-9ea6-f484c263ce69.png)
+- 在操作系统内核空间里，实现网络传输功能的结构是sock，基于不同的协议和应用场景，会被泛化为各种类型的xx_sock，它们结合硬件，共同实现了网络传输功能。为了将这部分功能暴露给用户空间的应用程序使用，于是引入了socket层，同时将sock嵌入到文件系统的框架里，sock就变成了一个特殊的文件，用户就可以在用户空间使用文件句柄，也就是socket_fd来操作内核sock的网络传输能力。
+- 这个socket_fd是一个int类型的数字。现在回去看socket的中文翻译，套接字，将它理解为一套用于连接的数字。
+- ### 2.3.4.  socket实现网络通信
+- 整个阶段分为两部分，分别是建立连接和数据传输。
+- 建立连接
+  
+  ![](../../assets/VSCode解析/006_1728897309086-c1e96574-4aa1-4079-ac4b-0264bf6fefd5.png)
+	- 在客户端，代码执行socket提供的connect(sockfd, "ip:port")方法时，会通过sockfd句柄找到对应的文件，再根据文件里的信息指向内核的sock结构。通过这个sock结构主动发起三次握手。
+	- 在服务端握手次数还没达到"三次"的连接，叫半连接，完成好三次握手的连接，叫全连接。它们分别会用半连接队列和全连接队列来存放，这两个队列会在你执行listen()方法的时候创建好。当服务端执行accept()方法时，就会从全连接队列里拿出一条全连接。
+	- 至此，连接就算准备好了，之后，就可以开始传输数据。
+	  
+	  虽然都叫队列，但半连接队列其实是个hash表，而全连接队列其实是个链表。
+	  
+	  那么问题来了，为什么半连接队列要设计成哈希表而全连接队列是个链表？这个在我在我之前写的《没有accept，能建立TCP连接吗？》 已经提到过，不再重复。
+- 数据传输
+	- 为了实现发送和接收数据的功能，sock结构体里带了一个发送缓冲区和一个接收缓冲区，说是缓冲区，但其实就是个链表，上面挂着一个个准备要发送或接收的数据。
+	- 当应用执行send()方法发送数据时，同样也会通过sock_fd句柄找到对应的文件，根据文件指向的sock结构，找到这个sock结构里带的发送缓冲区，将数据会放到发送缓冲区，然后结束流程，内核看心情决定什么时候将这份数据发送出去。
+	- 接收数据流程也类似，当数据送到linux内核后，数据不是立马给到应用程序的，而是先放在接收缓冲区中，数据静静躺着，卑微的等待应用程序什么时候执行recv()方法来拿一下。
+	  
+	  ![](../../assets/VSCode解析/007_1728897433251-7c7711ac-9c27-4db7-9784-27fc76191f72.png)
+	- 当你的应用进程执行recv()方法尝试获取（阻塞场景下）接收缓冲区的数据时。
+		- 如果有数据，那正好，取走就好了。这点没啥疑问。
+		- 但如果没数据，就会将自己的进程信息注册到这个sock用的等待队列里，然后进程休眠。如果这时候有数据从远端发过来了，数据进入到接收缓冲区时，内核就会取出sock的等待队列里的进程，唤醒进程来取数据。
+	- 有时候，你会看到多个进程通过fork的方式，listen了同一个socket_fd。在内核，它们都是同一个sock，多个进程执行listen()之后，都嗷嗷等待连接进来，所以都会将自身的进程信息注册到这个socket_fd对应的内核sock的等待队列中。如果这时真来了一个连接，是该唤醒等待队列里的哪个进程来接收连接呢？这个问题的答案比较有趣。
+	- 在linux 2.6以前，会唤醒等待队列里的所有进程。但最后其实只有一个进程会处理这个连接请求，其他进程又重新进入休眠，这些被唤醒了又无事可做最后只能重新回去休眠的进程会消耗一定的资源。就好像你在广东的街头，想问路，叫一声靓仔，几十个人同时回头，但你其实只需要其中一个靓仔告诉你路该怎么走。你这种一不小心惊动这群靓仔的场景，在计算机领域中，就叫惊群效应。
+	- 在linux 2.6之后，只会唤醒等待队列里的其中一个进程。是的，socket监听的惊群效应问题被修复了。
+- ### 2.3.5.  参考资料
+  
+  [https://www.51cto.com/article/742745.html](https://www.51cto.com/article/742745.html)
+-
+- # 3.  编程语言基础
+- VSCode源代码是使用的typescript写的。typescript和javascript有着非常密切的关系，因此需要前期有一些基本的语言的基础和习惯。
+- 比较重要的基础包括：TypeScript、Electron（基础框架）、Webpack（打包）、Nodejs事件循环机制、Promise、Gulp工具（自动化任务构建工具）等。
+- 其余还包括浏览器中的DOM、HTML等相关知识、计算机网络、操作系统、Linux、Pty（伪终端）等知识没有单独列出来介绍，需要的时候再捎带一些。
+- ## 3.1.  TypeScript基础
+- [TypeScript基础知识](../../01-编程语言/JavaScript与TypeScript/TypeScript基础知识.md)
+- ## 3.2.  Electron基础
+- [Electron基础](../桌面应用/Electron基础.md)
+- ## 3.3.  Webpack基础
+- [Webpack基础](../../02-前端开发/构建工具/Webpack基础.md)
+- ## 3.4.  Nodejs事件循环机制
+- [Nodejs事件循环机制](../../01-编程语言/JavaScript与TypeScript/Nodejs事件循环机制.md)
+- ## 3.5.  Promise
+- Promise 对象是 JavaScript 的异步操作解决方案，为异步操作提供统一接口。它起到代理作用（proxy），充当异步操作与回调函数之间的中介，使得异步操作具备同步操作的接口。Promise 可以让异步操作写起来，就像在写同步操作的流程，而不必一层层地嵌套回调函数。
+- Promise 的设计思想是，所有异步任务都返回一个 Promise 实例。Promise 实例有一个then方法，用来指定下一步的回调函数。
+- ### 3.5.1.  Promise对象的状态
+- Promise 对象通过自身的状态，来控制异步操作。Promise 实例具有三种状态。
+	- 异步操作未完成（pending）
+	- 异步操作成功（fulfilled）
+	- 异步操作失败（rejected）
+- 上面三种状态里面，fulfilled和rejected合在一起称为resolved（已定型）。
+- 这三种的状态的变化途径只有两种。
+	- 从“未完成”到“成功”
+	- 从“未完成”到“失败”
+- 一旦状态发生变化，就凝固了，不会再有新的状态变化。这也是 Promise 这个名字的由来，它的英语意思是“承诺”，一旦承诺成效，就不得再改变了。这也意味着，Promise 实例的状态变化只可能发生一次。
+- 因此，Promise 的最终结果只有两种。
+	- 异步操作成功，Promise 实例传回一个值（value），状态变为fulfilled。
+	- 异步操作失败，Promise 实例抛出一个错误（error），状态变为rejected。
+- ### 3.5.2.  Promise的基本使用
+  
+  ```
+  const promise = new Promise((resolve, reject) => {
+  let status = true;
+  if (status) {
+    resolve('操作成功!');
+  } else {
+    reject('操作失败!');
+  }
+  });
+  
+  promise.then(res => {
+  console.log('成功结果：' + res);
+  }, error => {
+  console.log('失败结果：' + error);
+  
+  });
+  ```
+- ### 3.5.3.  Promise的进阶使用
+- Promise实例具有then方法，then方法是定义在原型对象Promise.prototype上的。它的作用前面说过，第一个回调函数是状态改变fufilled时调用的，第二个回调函数(可选)是状态改变rejected时调用的。
+- then方法的基础调用写法，可以写一个回调方法，来执行成功后的回调。then方法返回一个的是一个新的Promise实例，因此我们可以采用链式写法，即then方法后面再调用一个then方法。采用链式的then，可以指定一组按照次序调用的回调函数。这时，前一个回调函数，有可能返回的还是一个Promise对象（即有异步操作），这时后一个回调函数，就会等待该Promise对象的状态发生变化，才会被调用。
+- catch是用于指定发生错误的回调函数。Promise实例当状态改变为rejected状态或者操作失败抛出异常错误，就会被catch方法捕获。所以在Promise实例中reject方法等同于抛出错误。如果Promise的状态已经变成了resolved，再抛出错误无效。
+- finally方法用于指定不管Promis对象最后状态如何，都会执行的操作。该方法是 ES2018 引入标准的。
+- Promise.all方法用于将多个Promise实例，包装成一个新的Promise实例。在all方法中可以传递多个Promise对象，当所有的Promise对象状态都返回fufilled，才会返回fulfilled，否则返回rejected。
+- Promise.race方法同样是将多个Promise实例，包装成一个新的Promise实例。可以传递多个Promise对象作为参数，如果实例有一个实例率先改变状态，那么race的状态就会跟着改变。
+- ## 3.6.  Gulp工具
+- [gulp构建工具](../../02-前端开发/构建工具/gulp构建工具.md)
+- ## 3.7.  IIFE(Immediately Invoked Functions Expressions)
+- ### 3.7.1.  简要介绍
+- JavaScript 中的立即调用函式 (IIFE，Immediately Invoked Function Expression)，指的是一种在定义时立即执行的匿名函式，通常用于创建一个局部作用域，避免全局污染。
+- 立即调用函数式的好处：
+	- 创建局部作用域：通过使用 IIFE 可以创建一个局部作用域，避免全局变量的污染。以下代码可以看到，在 IIFE 中，有一个局部变量 localVariable。 localVariable 只能在 IIFE 内访问，不能在 IIFE 外访问
+	  
+	  ```
+	  // Global scope
+	  var globalVariable = "global variable";
+	  
+	  (function () {
+	  // Local scope inside IIFE
+	  var localVariable = "local variable";
+	  console.log(localVariable); // local variable
+	  })();
+	  
+	  console.log(localVariable); // ReferenceError: localVariable is not defined
+	  console.log(globalVariable); // global variable
+	  ```
+	- 避免命名冲突：IIFE 可以为变量创建了一个单独的命名空间，避免函式名和变量名的冲突。
+	  
+	  ```
+	  // Global scope
+	  var globalVariable = "global variable";
+	  
+	  (function () {
+	  // Local scope inside IIFE
+	  var globalVariable = "local variable inside IIFE";
+	  console.log(globalVariable); // local variable inside the IIFE
+	  })();
+	  
+	  console.log(globalVariable); // global variable
+	  ```
+	- 模组化编程：IIFE 可以将代码分为独立的模组，方便了代码的管理和维护。
+- ### 3.7.2.  常用场景
+- 创建只使用一次的函数，并立即执行它
+	- 创建只使用一次的函数比较好理解，在需要调用函数的地方使用IIFE，类似内联的效果：
+	  
+	  ```
+	  (function(){
+	  var a = 1, b = 2;
+	  console.log(a+b); // 3
+	  })();
+	  ```
+	- 还可以传入参数：
+	  
+	  ```
+	  (function(c){
+	  var a = 1, b = 2;
+	  console.log(a+b+c); // 6
+	  })(3);
+	  ```
+	- IIFE比较常见的形式是匿名函数，但是也可以是命名的函数：
+	  
+	  ```
+	  (function adder(a, b){
+	  console.log(a+b); // 7
+	  })(3, 4);
+	  ```
+	- 在js中应该尽量使用命名函数，因为匿名函数在堆栈跟踪的时候会造成一些不便。
+- 创建闭包，保存状态，隔离作用域
+	- 隔离作用域比较复杂一点，在ES6以前，JS没有块级作用域，只有函数作用域，作为一种对块级作用域的模拟就只能用function模拟一个作用域，比如如下代码：
+	  
+	  ```
+	  var myBomb = (function(){
+	  var bomb = "Atomic Bomb"
+	  return {
+	   get: function(){
+	     return bomb
+	   },
+	   set: function(val){
+	     bomb = val
+	   },
+	  }
+	  })()
+	  
+	  console.log(myBomb.get()) // Atomic Bomb
+	  myBomb.set("h-bomb")
+	  console.log(myBomb.get()) // h-bomb
+	  console.log(bomb) // ReferenceError: bomb is not defined
+	  bomb = "none"
+	  console.log(bomb) // none
+	  ```
+	- 可以看到一个比较奇特的现象，按照常理，一个函数执行完毕，在它内部声明的变量都会被销毁，但是这里变量bomb却可以通过myBomb.get和myBomb.set去读写，但是从外部直接去读和写却不行，这是闭包造成的典型效果。
+- 作为独立模块存在，防止命名冲突，命名空间注入
+	- 可以使用以下代码为ns这个命名空间注入变量和方法：
+	  
+	  ```
+	  var ns = ns || {};
+	  
+	  (function (ns){
+	  ns.name = 'Tom';
+	  ns.greet = function(){
+	   console.log('hello!');
+	  }
+	  })(ns);
+	  console.log(ns); // { name: 'Tom', greet: [Function] }
+	  ```
+	- 还可以扩展到更多的用途：
+	  
+	  ```
+	  (function (ns, undefined){
+	  var salary = 5000; // 私有属性
+	  ns.name = 'Tom'; // 公有属性
+	  ns.greet = function(){ // 公有方法
+	   console.log('hello!');
+	  }
+	  
+	  ns.externalEcho = function(msg){
+	   console.log('external echo: ' + msg);
+	   insideEcho(msg);
+	  }
+	  
+	  function insideEcho(msg){ // 私有方法
+	   console.log('inside echo: ' + msg);
+	  }
+	  })(window.ns = window.ns || {});
+	  
+	  console.log(ns.name); // Tom
+	  ns.greet(); // hello
+	  ns.age = 25;
+	  console.log(ns.age); // 25
+	  console.log(ns.salary); // undefined
+	  ns.externalEcho('JavaScript'); // external echo: JavaScript/inside echo: JavaScript
+	  insideEcho('JavaScript'); // Uncaught ReferenceError: insideEcho is not defined
+	  ns.insideEcho('JavaScript'); // Uncaught TypeError: ns.insideEcho is not a function
+	  ```
+	- 命名空间注入是IIFE作为命名空间的装饰器和扩展器的一个变体，使其更具有通用性。作用是可以在一个IIFE(这里可以把它理解成一个函数包装器)内部为一个特定的命名空间注入变量/属性和方法，并且在内部使用this指向该命名空间。
+- ### 3.7.3.  资料总结
+- [https://nullcc.github.io/2017/05/08/%E7%90%86%E8%A7%A3JavaScript%E7%9A%84%E7%AB%8B%E5%8D%B3%E8%B0%83%E7%94%A8%E5%87%BD%E6%95%B0%E8%A1%A8%E8%BE%BE%E5%BC%8F(IIFE)/](https://nullcc.github.io/2017/05/08/%E7%90%86%E8%A7%A3JavaScript%E7%9A%84%E7%AB%8B%E5%8D%B3%E8%B0%83%E7%94%A8%E5%87%BD%E6%95%B0%E8%A1%A8%E8%BE%BE%E5%BC%8F(IIFE)/)
+- ## 3.8.  闭 包
+- ### 3.8.1.  什么是闭包？
+- 闭包就是能够读取其他函数内部变量的函数。
+- 由于在Javascript语言中，只有函数内部的子函数才能读取局部变量，因此可以把闭包简单理解成"定义在一个函数内部的函数"。
+- 所以，在本质上，闭包就是将函数内部和函数外部连接起来的一座桥梁。
+- ### 3.8.2.  闭包的用途
+- 闭包可以用在许多地方。它的最大用处有两个，一个是前面提到的可以读取函数内部的变量，另一个就是让这些变量的值始终保持在内存中。
+  
+  ```
+  function f1(){
+  
+  　　var n=999;
+  
+  　　nAdd=function(){n+=1}
+  
+  　　function f2(){
+  　　　　alert(n);
+  　　}
+  
+  　　return f2;
+  
+  }
+  
+  var result=f1();
+  
+  result(); // 999
+  
+  nAdd();
+  
+  result(); // 1000
+  ```
+- 在这段代码中，result实际上就是闭包f2函数。它一共运行了两次，第一次的值是999，第二次的值是1000。这证明了，函数f1中的局部变量n一直保存在内存中，并没有在f1调用后被自动清除。
+- 为什么会这样呢？原因就在于f1是f2的父函数，而f2被赋给了一个全局变量，这导致f2始终在内存中，而f2的存在依赖于f1，因此f1也始终在内存中，不会在调用结束后，被垃圾回收机制（garbage collection）回收。
+- 这段代码中另一个值得注意的地方，就是"nAdd=function(){n+=1}"这一行，首先在nAdd前面没有使用var关键字，因此nAdd是一个全局变量，而不是局部变量。其次，nAdd的值是一个匿名函数（anonymous function），而这个匿名函数本身也是一个闭包，所以nAdd相当于是一个setter，可以在函数外部对函数内部的局部变量进行操作。
+- 注意点：
+	- 1）由于闭包会使得函数中的变量都被保存在内存中，内存消耗很大，所以不能滥用闭包，否则会造成网页的性能问题，在IE中可能导致内存泄露。解决方法是，在退出函数之前，将不使用的局部变量全部删除。
+	- 2）闭包会在父函数外部，改变父函数内部变量的值。所以，如果你把父函数当作对象（object）使用，把闭包当作它的公用方法（Public Method），把内部变量当作它的私有属性（private value），这时一定要小心，不要随便改变父函数内部变量的值。
+- ### 3.8.3.  闭包在VSCode中的表现
+- 在VSCode中，最典型的闭包表现就是创建shared Process这一块。
+  
+  ```
+  private setupSharedProcess(machineId: string, sqmId: string): { sharedProcessReady: Promise<MessagePortClient>; sharedProcessClient: Promise<MessagePortClient> } {
+  const sharedProcess = this._register(this.mainInstantiationService.createInstance(SharedProcess, machineId, sqmId));
+  
+  const sharedProcessClient = (async () => {
+  	this.logService.trace('Main->SharedProcess#connect');
+  
+  	const port = await sharedProcess.connect();
+  
+  	this.logService.trace('Main->SharedProcess#connect: connection established');
+  
+  	return new MessagePortClient(port, 'main');
+  })();
+  
+  const sharedProcessReady = (async () => {
+  	await sharedProcess.whenReady();
+  
+  	return sharedProcessClient;
+  })();
+  
+  return { sharedProcessReady, sharedProcessClient };
+  }
+  ```
+- SharedProcess是一个内部的变量，通过sharedProcessReady和sharedProcessClient这两个方法传递出去，被调用。
+- ### 3.8.4.  资料总结
+- [https://www.ruanyifeng.com/blog/2009/08/learning_javascript_closures.html](https://www.ruanyifeng.com/blog/2009/08/learning_javascript_closures.html)
+- ## 3.9.  Proxy代理
+- javascript中的proxy代理和java中的反射机制很像。
+- [JavaScript Proxy解析](../../01-编程语言/JavaScript与TypeScript/JavaScript%20Proxy解析.md)
+- ## 3.10 MarkDown编辑器
+- [MarkDown编辑器](../桌面应用/MarkDown编辑器.md)
+-
+- # 4.  VSCode中的基本概念
+- ## 4.1.  Disposable
+- Disposable 是一个非常重要和基础的概念的，它贯穿了整个 vscode 项目中，90% 的对象都是继承 Disposable，还有大量的实现 IDisposable 接口的对象。 Disposable 本身并没有做太多事情: 它是一个抽象类，提供了两个方法 _register （protected） 和 dispose (public)， 可以通过 dispose 方法把 _register 注册的 listener (IDispsable 对象) 给全部销毁。其核心的工作就是将继承Disposable的对象管理起来，再其销毁的时候销毁掉这个对象以及其依赖的对象，提高内存的利用率。
+- 为了保证插件的高效运行，VS Code使用了Dispose模式，大部分插件API都实现了IDisposable接口，生成的对象则会拥有一个dispose函数属性。
+  
+  ```
+  interface IDisposable {
+  dispose(): void;
+  }
+  ```
+- Dispose模式主要用来资源管理，资源比如内存被对象占用，则会通过调用方法来释放，这些方法通常被命名为‘close’，‘dispose’，‘free’，‘release’。一个著名的例子便是C#，C#通过Dipose Pattern来释放不受CLR(Common Language Runtime)管理的非托管资源。
+- Javascript的内存分配是通过GC(garbage collector)进行管理，大部分情况下它都是自动执行且对用户不可见的。然而这种自动化的管理方式却存在一个潜在的问题，就是Javascript开发者会错误的认为他们不需要再关心内存管理了，从而再无意间书写一些不利于内存回收的代码。
+- 所以，最清楚被分配的内存在未来是否需要使用的还是开发者，但是每次使用完一个对象后就手动的将其销毁，这样的做法即不高效，也不可靠。正因为此，VS Code使用了Dispose Pattern来管理对象销毁。当扩展功能执行时，Extension Host会在正确的时机调用dispose方法，销毁Code生成的对象，减少内存使用。比如说，方法‘setStatusBarMessage(value: string)’返回一个‘Disposable’对象，当调用dispose方法的时候会移除掉信息对象。
+- ```
+  // 第一个重载参数是单个disposable类型
+  function dispose<T extends IDisposable>(disposable: T): T;
+  // 第二个重载参数是多个disposable类型传参数，参数可能为undefined。
+  function dispose<T extends IDisposable>(...disposables: Array<T | undefined>): T[];
+  // 第三个重载参数是一个disposable类型的数组。
+  function dispose<T extends IDisposable>(disposables: T[]): T[];
+  // 第三个重载参数为两种，第一个是disposable类型或disposable数组类型，剩余的为disposable类型。
+  function dispose<T extends IDisposable>(first: T | T[], ...rest: T[]): T | T[] | undefined {
+  // 如果第一个参数是数组，则依次调用传参数的dispose方法
+  if (Array.isArray(first)) {
+    first.forEach(d => d && d.dispose());
+    // 返回空的数组
+    return [];
+  } else if (rest.length === 0) {
+    // 如果没有没有剩余参数
+    if (first) {
+      // 如果存在first
+      // 调用第一个dispose
+      first.dispose();
+      // 返回first
+      return first;
+    }
+  - return undefined;
+  } else {
+    // first不是数组，且rest长度不为0
+    dispose(first);
+    dispose(rest);
+  - // 返回空数组
+    return [];
+  }
+  }
+  - // implement IDisposable 的Disposable 抽象类
+  abstract class Disposable implements IDisposable {
+  - // Disposable类的静态对象，用于返回一个包含空的dispose方法的IDisposable对象。dispose被执行了，则表示该对象不再需要了。
+  // 部分基础API使用了该对象，用于标志资源释放。
+  static None = Object.freeze<IDisposable>({ dispose() { } });
+  - // protected属性toDispose返回protected对象_toDispose, 该对象初始值是一个空的数组。
+  protected _toDispose: IDisposable[] = [];
+  // 返回IDisposable数组。
+  protected get toDispose(): IDisposable[] { return this._toDispose; }
+  - // 设置状态标志，表示该对象是否有被销毁。
+  private _lifecycle_disposable_isDisposed = false;
+  - // 暴露公共方法dispose，执行完后将_lifecycle_disposable_isDisposed状态标志设为true，同时调用lifecycle内的dispose方法处理_toDispose数组，并重新赋值空数组。
+  public dispose(): void {
+    this._lifecycle_disposable_isDisposed = true;
+    this._toDispose = dispose(this._toDispose);
+  }
+  - // 内部方法注册实例，若_lifecycle_disposable_isDisposed为true，则表明该方法已经被dispose过，则不能再使用，需dispose掉，否则，推入_toDispose数组。
+  protected _register<T extends IDisposable>(t: T): T {
+    // 判断这个对象有没有被dispose过
+    if (this._lifecycle_disposable_isDisposed) {
+      console.warn('Registering disposable on object that has already been disposed.');
+      t.dispose();
+    } else {
+      this._toDispose.push(t);
+    }
+  - return t;
+  }
+  }
+  ```
+- ## 4.2.  Event和Emitter
+- 在vscode中事件模块是一个比较基础，而且比较核心的一块内容，可以说是vscode应用程序的一块基石。
+- ### 4.2.1.  Event事件
+- Event 接口规定了一个函数，当调用了这个函数，就表示监听了这个函数所对应的事件流。
+	- listener 参数是事件派发时将会被调用的回调函数，参数 e 为单个事件，换句话说， listener 就是事件的消费者
+	- thisArgs 参数是回调函数中 this 所指向的对象
+	- disposables
+	  
+	  ```
+	  export interface Event<T> {
+	  (listener: (e: T) => any, thisArgs?: any, disposables?: IDisposable[] | DisposableStore): IDisposable;
+	  }
+	  ```
+- 返回的 IDisposable 对象用于解除这个监听的（通过调用它的 dispose 方法）。
+- 另外一种解除监听的方式就是 disposable 了，Event 函数在执行的过程中会将 IDisposable 插入 disposables，方便调用方决定在什么时候解除监听。
+- 在VSCode源码的实现中，实现了一个Event的库。里面包含了很多其他的有关Event事件的方法。
+- ```
+  // 主要定义了一些接口协议，以及相关方法
+  // 使用 namespace 的方式将相关内容包裹起来
+  export namespace Event {
+  	// 来看看里面比较关键的一些方法
+  
+  	// 给定一个事件，返回另一个仅触发一次的事件
+    export function once<T>(event: Event<T>): Event<T> {}
+  
+    // 给定一连串的事件处理功能（过滤器，映射等），每个事件和每个侦听器都将调用每个函数
+    // 对事件链进行快照可以使每个事件每个事件仅被调用一次
+    // 以此衍生了 map、forEach、filter、any 等方法此处省略
+  	export function snapshot<T>(event: Event<T>): Event<T> {}
+  
+  	// 给事件增加防抖
+  	export function debounce<T>(event: Event<T>, merge: (last: T | undefined, event: T) => T, delay?: number, leading?: boolean, leakWarningThreshold?: number): Event<T>;
+  
+  	// 触发一次的事件，同时包括触发时间
+  	export function stopwatch<T>(event: Event<T>): Event<number> {}
+  
+  	// 仅在 event 元素更改时才触发的事件
+  	export function latch<T>(event: Event<T>): Event<T> {}
+  
+  	// 缓冲提供的事件，直到出现第一个 listener，这时立即触发所有事件，然后从头开始传输事件
+  	export function buffer<T>(event: Event<T>, nextTick = false, _buffer: T[] = []): Event<T> {}
+  
+    // 可链式处理的事件，支持以下方法
+  	export interface IChainableEvent<T> {
+  		event: Event<T>;
+  		map<O>(fn: (i: T) => O): IChainableEvent<O>;
+  		forEach(fn: (i: T) => void): IChainableEvent<T>;
+  		filter(fn: (e: T) => boolean): IChainableEvent<T>;
+  		filter<R>(fn: (e: T | R) => e is R): IChainableEvent<R>;
+  		reduce<R>(merge: (last: R | undefined, event: T) => R, initial?: R): IChainableEvent<R>;
+  		latch(): IChainableEvent<T>;
+  		debounce(merge: (last: T | undefined, event: T) => T, delay?: number, leading?: boolean, leakWarningThreshold?: number): IChainableEvent<T>;
+  		debounce<R>(merge: (last: R | undefined, event: T) => R, delay?: number, leading?: boolean, leakWarningThreshold?: number): IChainableEvent<R>;
+  		on(listener: (e: T) => any, thisArgs?: any, disposables?: IDisposable[] | DisposableStore): IDisposable;
+  		once(listener: (e: T) => any, thisArgs?: any, disposables?: IDisposable[]): IDisposable;
+  	}
+  	class ChainableEvent<T> implements IChainableEvent<T> {}
+  
+    // 将事件转为可链式处理的事件
+  	export function chain<T>(event: Event<T>): IChainableEvent<T> {}
+  
+    // 来自 DOM 事件的事件
+  	export function fromDOMEventEmitter<T>(emitter: DOMEventEmitter, eventName: string, map: (...args: any[]) => T = id => id): Event<T> {}
+  
+    // 来自 Promise 的事件
+  	export function fromPromise<T = any>(promise: Promise<T>): Event<undefined> {}
+  }
+  ```
+- Event中主要是一些对事件的处理和某种类型事件的生成。其中，除了常见的once和 DOM 事件等兼容，还提供了比较丰富的事件能力：
+	- 防抖动
+	- 可链式调用
+	- 缓存
+	- Promise 转事件等等
+- ### 4.2.2.  Emitter事件发射器
+- Emitter 类型暴露了两个重要方法：
+	- fire，从这个方法的函数签名就能看出它就是用来派发一个事件的，该方法的主要逻辑就是将 this._listeners 当中的保存的 listener 全部调用一遍（省略了部分分支逻辑和性能监控相关代码）
+	  
+	  ```
+	  fire(event: T): void {
+	  if (this._listeners) {
+	  for (let listener of this._listeners) {
+	  	this._deliveryQueue.push([listener, event]);
+	  }
+	  
+	  while (this._deliveryQueue.size > 0) {
+	  	const [listener, event] = this._deliveryQueue.shift()!;
+	  	try {
+	  		if (typeof listener === 'function') {
+	  			listener.call(undefined, event);
+	  		} else {
+	  			listener[0].call(listener[1], event);
+	  		}
+	  	} catch (e) {
+	  		onUnexpectedError(e);
+	  	}
+	  }
+	  }
+	  }
+	  ```
+	- get event()，这个方法会在 Emitter 中创建一个 Event，其主要逻辑就是将 listener 添加到 this._listeners 当中
+	  
+	  ```
+	  const remove = this._listeners.push(!thisArgs ? listener : [listener, thisArgs]);
+	  ```
+- Emitter 类型还提供了一些特殊的回调接口：
+  
+  ```
+  export interface EmitterOptions {
+  onFirstListenerAdd?: Function;
+  onFirstListenerDidAdd?: Function;
+  onListenerDidAdd?: Function;
+  onLastListenerRemove?: Function;
+  }
+  ```
+- 这使得 Emitter 在注册消费者的时候执行一些额外的逻辑。
+- 事件的使用方式主要包括：
+	- 注册事件发射器
+	- 对外提供定义的事件
+	- 在特定时机向订阅者触发事件
+- 在Emitter的实现过程中，还实现了其他的一些场景，比如防抖、once等等。具体的解析可以参考：[https://github.com/wzhudev/blog/issues/40](https://github.com/wzhudev/blog/issues/40)
+- ### 4.2.3.  简单的Event-Emitter使用
+- 事件的定义:（生产一个事件）
+  
+  ```
+  export class EditorService extends Disposable implements EditorServiceImpl {
+  declare readonly _serviceBrand: undefined;
+  //#region events
+  private readonly _onDidActiveEditorChange = this._register(new Emitter<void>());
+  readonly onDidActiveEditorChange = this._onDidActiveEditorChange.event;
+  private readonly _onDidVisibleEditorsChange = this._register(new Emitter<void>());
+  readonly onDidVisibleEditorsChange = this._onDidVisibleEditorsChange.event;
+  private readonly _onDidEditorsChange = this._register(new Emitter<IEditorsChangeEvent>());
+  readonly onDidEditorsChange = this._onDidEditorsChange.event;
+  private readonly _onDidCloseEditor = this._register(new Emitter<IEditorCloseEvent>());
+  readonly onDidCloseEditor = this._onDidCloseEditor.event;
+  //#endregion
+  }
+  ```
+- 事件的消费：（注册监听函数）
+  
+  ```
+  import { Event } from 'vs/base/common/event';
+  class MainThreadDocumentAndEditorStateComputer {
+  constructor(
+  @IEditorService private readonly _editorService: IEditorService,
+  ) {
+  
+  this._editorService.onDidActiveEditorChange(_ => this._updateState(), this, this._toDispose);
+  Event.filter(this._paneCompositeService.onDidPaneCompositeOpen, event => event.viewContainerLocation === ViewContainerLocation.Panel)(_ => this._activeEditorOrder = ActiveEditorOrder.Panel, undefined, this._toDispose);
+  Event.filter(this._paneCompositeService.onDidPaneCompositeClose, event => event.viewContainerLocation === ViewContainerLocation.Panel)(_ => this._activeEditorOrder = ActiveEditorOrder.Editor, undefined, this._toDispose);
+  this._editorService.onDidVisibleEditorsChange(_ => this._activeEditorOrder = ActiveEditorOrder.Editor, undefined, this._toDispose);
+  }
+  }
+  ```
+- ### 4.2.4.  观察者模式（订阅-发布）
+	- Observer：抽象观察者，是观察者的抽象类，它定义了一个更新接口，使得在得到主题更改通知时更新自己。
+	- ConcrereObserver：具体观察者，实现抽象观察者定义的更新接口，以便在得到主题更改通知时更新自身的状态。
+- 【例】微信公众号
+	- 在使用微信公众号时，大家都会有这样的体验，当你关注的公众号中有新内容更新的话，它就会推送给关注公众号的微信用户端。我们使用观察者模式来模拟这样的场景，微信用户就是观察者，微信公众号是被观察者，有多个的微信用户关注了程序猿这个公众号。
+- ```
+  public interface Observer {
+      void update(String message);
+  }
+  
+  public class WeixinUser implements Observer {
+      // 微信用户名
+      private String name;
+  
+      public WeixinUser(String name) {
+          this.name = name;
+      }
+      @Override
+      public void update(String message) {
+          System.out.println(name + "-" + message);
+      }
+  }
+  
+  public interface Subject {
+      //增加订阅者
+      public void attach(Observer observer);
+  
+      //删除订阅者
+      public void detach(Observer observer);
+      
+      //通知订阅者更新消息
+      public void notify(String message);
+  }
+  
+  public class SubscriptionSubject implements Subject {
+      //储存订阅公众号的微信用户
+      private List<Observer> weixinUserlist = new ArrayList<Observer>();
+  
+      @Override
+      public void attach(Observer observer) {
+          weixinUserlist.add(observer);
+      }
+  
+      @Override
+      public void detach(Observer observer) {
+          weixinUserlist.remove(observer);
+      }
+  
+      @Override
+      public void notify(String message) {
+          for (Observer observer : weixinUserlist) {
+              observer.update(message);
+          }
+      }
+  }
+  
+  public class Client {
+      public static void main(String[] args) {
+          SubscriptionSubject mSubscriptionSubject=new SubscriptionSubject();
+          //创建微信用户
+          WeixinUser user1=new WeixinUser("孙悟空");
+          WeixinUser user2=new WeixinUser("猪悟能");
+          WeixinUser user3=new WeixinUser("沙悟净");
+          //订阅公众号
+          mSubscriptionSubject.attach(user1);
+          mSubscriptionSubject.attach(user2);
+          mSubscriptionSubject.attach(user3);
+          //公众号更新发出消息给订阅的微信用户
+          mSubscriptionSubject.notify("传智黑马的专栏更新了");
+      }
+  }
+  ```
+- **优点：**
+	- 降低了目标与观察者之间的耦合关系，两者之间是抽象耦合关系。
+	- 被观察者发送通知，所有注册的观察者都会收到信息【可以实现广播机制】
+- **缺点：**
+	- 如果观察者非常多的话，那么所有的观察者收到被观察者发送的通知会耗时
+	- 如果被观察者有循环依赖的话，那么被观察者发送通知会使观察者循环调用，会导致系统崩溃
+- **使用场景**
+	- 对象间存在一对多关系，一个对象的状态发生改变会影响其他对象。
+	- 当一个抽象模型有两个方面，其中一个方面依赖于另一方面时。
+- ### 4.2.5.  小结
+- 事件是什么，事件本身没有任何功能逻辑，事件的功能逻辑都在监听函数的处理中，事件提供的是一种**注册事件标识符、外界能注册某个事件发生时的回调（监听函数）、外界能够触发事件的能力、内部在事件发生时能执行监听函数、移出监听函数销毁事件等清理能力**，VSCode 将事件的清理做成了自动化的方式。
+- 类的具名化调用
+	- 通过new Emitter<IXXXEvent>()生产一个包含类型的事件，提供的get event()获得可以注册回调函数 listener 的事件接口，并且将这个 event 挂载在功能类XXXService的属性onXXXEvent上
+	- 其它类通过依赖注入和上述功能类产生依赖关系，调用上述XXXService.onXXXEvent(() => //listener )注册回调函数
+- 类的自动销毁：通过依赖的标准化注册流程，**一个类销毁时，自动分析依赖销毁依赖里相关的内容，做到了自动化的链式销毁。**
+	- 事件定义方的类销毁时：this._register(new Emitter<IXXXEvent>())将生产的事件_register 到自己的类上，收集了一个依赖，在自己的类 dispose 时调用 _register 里注册的事件 Emitter 的 dispose 方法，做到了自己销毁时，自己生产的事件也被销毁
+	- 事件监听方的类销毁时：监听方 xxxService 的类销毁 -> 调用 xxxService.dispose() -> 找到 xxxService 上 _register 的事件监听器的返回内容 -> 执行事件监听器返回内容 SafeDisposable.dispose -> 抹除了原始事件监听列表里对 xxxService 对该事件注册
+- ## 4.3.  通信机制
+- Electron框架是一个典型的多进程多线程的框架，免不了需要去设计进程间的通信。
+- 接下来介绍一下VSCode中的一些关于通信方面的概念
+- 通信机制会有如下内容需要设计：
+	- 协议设计-Protocol
+	- 通信频道-Channel
+	- 连接-Connection
+	- 服务端-IPCServer
+	- 客户端-IPCClient
+- ### 4.3.1.  通信概念释义
+  
+  | **概念名词** | **概念解释** | **作用** |
+  | **Protocol** | 通信协议 | 通信的基础协议规范 |
+  | **Channel** | 客户端频道 | 端与端之间进行信息传输的通道，类似于电台频道 |
+  | **ServerChannel** | 服务端频道 | 端与端之间进行信息传输的通道，类似于电台频道 |
+  | **ChannelClient** | 频道的客户端 | 客户端频道的管理 |
+  | **ChannelServer** | 频道的服务端 | 服务端频道的管理 |
+  | **Connection** | 连接 | 端与端之间的连接对应关系 |
+  | **IPCClient** | IPC 客户端 | 负责连接的建立以及 Channel 的注册和获取 |
+  | **IPCServer** | IPC 服务端 | 负责连接的建立以及 Channel 的注册和获取 |
+- 协议（Protocol）
+	- 两个端之间进行消息通信的约定，比如我们是通过语言还是手语比划进行通信，需要通过协议进行约定。
+	- 在 VS Code 中，约定了最基础的协议范围包括发送和接收消息两个方法：
+		- 发送：send
+		- 接收：onMessage
+- 频道（Channel）
+	- 狭义定义上，频道又叫信道，信道是信号在通信系统重传输的通道，是信号从发射端传输到接收端所经过的传输煤质。
+	- 在 VS Code 中，频道是一组可供其他端进行调用的服务集合。一个标准的频道有两个功能：
+		- 点播：call
+		- 收听：listen
+	- 在频道中，Server是专门处理消息的类，Client是专门发送消息的类。
+- 客户端&服务端（Server&Client）
+	- 客户端 & 服务端是频道的承载主体。一般客户端是指发起连接的一端，服务端是被连接的一端。
+	- 在 VS Code 中，服务端提供一系列服务的频道；渲染进程是客户端，调用服务端频道中的服务或者收听服务端消息。不管是服务端还是客户端，都需要具备发送和接受消息的能力，才能实现正常的通信。
+- 连接（Connection）
+	- 客户端 & 服务端之间进行通信依赖的连接。
+	- 在 VS Code 中一个连接其实是一对客户端与服务端的对应关系。
+- 上述接口和类的定义对应文件为：src/vs/base/parts/ipc/common/ipc.ts
+- ### 4.3.2.  实现示例
+  
+  ![](../../assets/VSCode解析/008_1708998583271-d0834f61-54a8-43c4-9d1d-f72522c04aca.jpeg)
+- 请求实现（基于 IMessagePassingProtocol 协议）
+  
+  ```
+  class QueueProtocol implements IMessagePassingProtocol {
+  private buffering = true;
+  private buffers: VSBuffer[] = [];
+  
+  private readonly _onMessage = new Emitter<VSBuffer>({
+    onDidAddFirstListener: () => {
+      for (const buffer of this.buffers) {
+        this._onMessage.fire(buffer);
+      }
+  
+      this.buffers = [];
+      this.buffering = false;
+    },
+    onDidRemoveLastListener: () => {
+      this.buffering = true;
+    }
+  });
+  
+  readonly onMessage = this._onMessage.event;
+  other!: QueueProtocol;
+  
+  send(buffer: VSBuffer): void {
+    this.other.receive(buffer);
+  }
+  
+  protected receive(buffer: VSBuffer): void {
+    if (this.buffering) {
+      this.buffers.push(buffer);
+    } else {
+      this._onMessage.fire(buffer);
+    }
+  }
+  }
+  ```
+- 客户端（基于IPCClient）
+  
+  ```
+  class TestIPCClient extends IPCClient<string> {
+  private readonly _onDidDisconnect = new Emitter<void>();
+  readonly onDidDisconnect = this._onDidDisconnect.event;
+  
+  constructor(protocol: IMessagePassingProtocol, id: string) {
+  super(protocol, id);
+  }
+  
+  override dispose(): void {
+  this._onDidDisconnect.fire();
+  super.dispose();
+  }
+  }
+  ```
+- 服务端（基于IPCServer）
+  
+  ```
+  class TestIPCServer extends IPCServer<string> {
+  private readonly onDidClientConnect: Emitter<ClientConnectionEvent>;
+  
+  constructor() {
+  const onDidClientConnect = new Emitter<ClientConnectionEvent>();
+  super(onDidClientConnect.event);
+  this.onDidClientConnect = onDidClientConnect;
+  }
+  
+  // 创建一个客户端 & 服务端的连接
+  createConnection(id: string): IPCClient<string> {
+  const [pc, ps] = createProtocolPair();
+    const pc = new QueueProtocol();
+    const ps = new QueueProtocol();
+    pc.other = ps;
+    ps.other = pc;
+  const client = new TestIPCClient(pc, id);
+  
+  this.onDidClientConnect.fire({
+  	protocol: ps,
+  	onDidClientDisconnect: client.onDidDisconnect
+  });
+  
+  return client;
+  }
+  }
+  ```
+- 服务端频道及其对应的服务
+  
+  ```
+  // 服务接口
+  interface ITestService {
+  marco(): Promise<string>;
+  onPong: Event<string>;
+  }
+  
+  // 服务
+  class TestService implements ITestService {
+  private readonly _onPong = new Emitter<string>();
+  readonly onPong = this._onPong.event;
+  
+  marco(): Promise<string> {
+  return Promise.resolve('polo');
+  }
+  
+  ping(msg: string): void {
+  this._onPong.fire(msg);
+  }
+  }
+  
+  // 服务频道
+  class TestChannel implements IServerChannel {
+  constructor(private service: ITestService) { }
+  
+  call(_: unknown, command: string, arg: any, cancellationToken: CancellationToken): Promise<any> {
+  switch (command) {
+  	case 'marco': return this.service.marco();
+  	default: return Promise.reject(new Error('not implemented'));
+  }
+  }
+  
+  listen(_: unknown, event: string, arg?: any): Event<any> {
+  switch (event) {
+  	case 'onPong': return this.service.onPong;
+  	default: throw new Error('not implemented');
+  }
+  }
+  }
+  ```
+- 客户端频道服务
+  
+  ```
+  class TestChannelClient implements ITestService {
+  get onPong(): Event<string> {
+  return this.channel.listen('onPong');
+  }
+  
+  constructor(private channel: IChannel) { }
+  
+  marco(): Promise<string> {
+  return this.channel.call('marco');
+  }
+  }
+  ```
+- 实现一对多IPC通信
+  
+  ```
+  // 创建服务
+  const service = new TestService();
+  // 创建服务端
+  const server = new TestIPCServer();
+  // 创建服务端频道
+  const channel = new TestChannel(service);
+  // 服务端注册服务
+  server.registerChannel('channel', channel);
+  
+  // 创建客户端-1
+  const client1 = server.createConnection('client1');
+  // 创建客户端-1对应的频道服务
+  const ipcService1 = new TestChannelClient(client1.getChannel('channel'));
+  // 创建客户端-2
+  const client2 = server.createConnection('client2');
+  // 创建客户端-2对应的频道服务
+  const ipcService2 = new TestChannelClient(client2.getChannel('channel'));
+  ```
+- 客户端监听服务端
+  
+  ```
+  ipcService1.onPong(() => console.log('Receive ping message on service1'));
+  ipcService2.onPong(() => console.log('Receive ping message on service2'));
+  ```
+- 服务端通知：
+  
+  ```
+  service.ping('hello world');
+  ```
+- ### 4.3.3.  资料总结
+- [https://developer.aliyun.com/article/1191616](https://developer.aliyun.com/article/1191616)
+- ## 4.4.  同步屏障
+- barrier 类通常指的是 TypeScript 或 JavaScript 中的 Barrier 类型，它用于控制异步操作的执行顺序。Barrier 类型是 vscode 扩展 API 中的一部分，用于确保异步操作在特定的顺序下执行，或者在所有操作都完成之后才执行某些操作。
+- Barrier 类型的主要作用包括：
+	- 同步异步操作：Barrier 可以用来同步多个异步操作，确保它们按照特定的顺序执行。这在需要等待多个异步操作完成后才能继续执行下一步的场景中非常有用。
+	- 等待所有操作完成：使用 Barrier，你可以等待一组异步操作全部完成后再执行某些代码。这可以通过 Barrier.wait() 方法实现，该方法会阻塞直到所有注册的异步操作都完成。
+	- 避免竞态条件：在多线程或多任务环境中，Barrier 可以帮助避免竞态条件，确保资源在被访问之前已经准备好。
+	- 简化异步代码：通过使用 Barrier，可以简化异步代码的复杂性，使得代码更加清晰和易于管理。
+- 在 VSCode 扩展开发中，Barrier 类型通常用于以下场景：
+	- 当扩展需要等待用户完成某些操作（如选择文件、输入文本等）后再继续执行。
+	- 当扩展需要在多个异步操作完成后更新 UI 或执行其他逻辑。
+	  
+	  ```
+	  export class Barrier {
+	  private _isOpen: boolean;
+	  private _promise: Promise<boolean>;
+	  private _completePromise!: (v: boolean) => void;
+	  
+	  constructor() {
+	  this._isOpen = false;
+	  this._promise = new Promise<boolean>((c, e) => {
+	  this._completePromise = c;
+	  });
+	  }
+	  
+	  isOpen(): boolean {
+	  return this._isOpen;
+	  }
+	  
+	  open(): void {
+	  this._isOpen = true;
+	  this._completePromise(true);
+	  }
+	  
+	  wait(): Promise<boolean> {
+	  return this._promise;
+	  }
+	  }
+	  ```
+- # 5.  VSCode的关键机制和关键部分解析
+- ## 5.1.  IoC和DI
+- ### 5.1.1.  简要介绍
+- **控制反转（Inversion of Control）**是一种是面向对象编程中的一种设计原则，用来减低计算机代码之间的耦合度。其基本思想是：借助于“第三方”实现具有依赖关系的对象之间的解耦。
+  
+  ![](../../assets/VSCode解析/009_1695540765789-f62a4f13-ca6a-4c62-b1b7-2810c517cb84.webp)![](../../assets/VSCode解析/010_1695540773800-54593eba-df0e-49aa-8fde-3b3ad9ca417b.webp)
+- 由于引进了中间位置的“第三方”，也就是IOC容器，使得A、B、C、D这4个对象没有了耦合关系，齿轮之间的传动全部依靠“第三方”了，全部对象的控制权全部上缴给“第三方”IOC容器，所以，IOC容器成了整个系统的关键核心。
+- **依赖注入（Dependency Injection）**就是将实例变量传入到一个对象中。**控制反转**是一种思想，**依赖注入**是一种设计模式。IoC框架使用依赖注入作为实现控制反转的方式，但是控制反转还有其他的实现方式。
+- ### 5.1.2.  VSCode依赖注入简要介绍
+- VSCode 的代码是围绕着各式各样的 service 组织起来的，这些 service 基本都定义在 platform 那一层，通过构造函数注入器（constructor injection）注入到 client 中。
+- 一个 service 需要两部分定义：1. service 接口定义 2. service 标志符。service 标志符是一个装饰器（Decorator是ES7的提案）并且必须和 service 接口同名。
+- 在VSCode的编码实现中，我们会发现实现一个服务所需要的通用步骤：
+	- 定义服务接口：首先需要定义服务接口，该接口定义了服务的 API，即服务能够提供哪些功能。接口通常放在 vs/platform 文件夹下的一个子文件夹中，比如 vs/platform/telemetry/common/telemetry。
+	- 定义与服务器同名的Identifier，比如export const IProductService = createDecorator<IProductService>('productService');。
+	- 注册服务：其次需要在应用程序的入口处，即 vs/code/electron-main/main.ts 中注册服务，并将其添加到容器中（以Identifier为key，实例或者SyncDescriptor实例作为value）。
+- VS Code 中依赖注入的实现主要在 vs/platform/instantiation/common 文件夹下，如下：
+	- descriptors.ts           服务实例包装类
+	- extensions.ts            通用服务注册、获取服务
+	- graph.ts                   基于有向图的依赖分析
+	- instantiation.ts         服务实例(创建 Decorator、存储服务的依赖)
+	- instantiationService.ts    容器
+	- serviceCollection.ts         服务集合
+- VSCode的依赖注入大致实现的原理就是：
+	- 第一次会将需要注入的服务形成一个有向图
+	- 第二次会遍历这个有向图然后生成对应的实例注入。使用图的数据结构可以清晰地看到依赖关系链路，并且能够快速识别出循环依赖问题。
+- ### 5.1.3.  基本用法
+- 首先需要定义一个类并在其构造函数中声明依赖的服务
+  
+  ```
+  class MyClass {
+  constructor(
+  @IAuthService private readonly authService: IAuthService,
+  @IStorageService private readonly storageService: IStorageService,
+  ) {
+  }
+  }
+  ```
+- 构造函数中的 @IAuthService 和 @IStorageService 是两个 Decorator（装饰器），装饰器在 JavaScript 中还属于一项提案，在 TypeScript 中是一项实验性特性。它可以被附加到类声明、方法、访问符以及参数上，在这段代码中他们被附加到了 MyClass 的构造函数参数 authService 和 storageService 上，也就是参数装饰器。参数装饰器会在运行时被函数调用，并传入三个参数：
+- 对于静态成员来说是类的构造函数，对于实例成员是类的原型对象
+- 成员的名字
+- 参数在函数参数列表中的索引
+- 服务的 Decorator 和接口定义一般如下
+  
+  ```
+  // 创建装饰器
+  export const IAuthService = createDecorator<IAuthService>('AuthService');
+  // 接口
+  export interface IAuthService {
+  readonly id: string;
+  readonly nickName: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  requestService: IRequestService;
+  }
+  ```
+- 服务接口需要有具体实现，同时也允许依赖其他服务
+- ```
+  class AuthServiceImpl implements IAuthService {
+    constructor(
+  		@IRequestService public readonly requestService IRequestService,		
+    ){
+    }
+  
+    public async getUserInfo() {
+  		const { id, nickName, firstName } = await getUserInfo();
+  		this.id = id;
+  		this.nickName = nickName;
+  		this.firstName = firstName;
+  		//...
+  	} 
+  }
+  ```
+- 还需要一个服务集，用于保存一组服务，并用其来创建一个容器
+  
+  ```
+  // 服务集
+  export class ServiceCollection {
+  
+  private _entries = new Map<ServiceIdentifier<any>, any>();
+  
+  constructor(...entries: [ServiceIdentifier<any>, any][]) {
+  for (let [id, service] of entries) {
+  	this.set(id, service);
+  }
+  }
+  
+  set<T>(id: ServiceIdentifier<T>, instanceOrDescriptor: T | SyncDescriptor<T>): T | SyncDescriptor<T> {
+  const result = this._entries.get(id);
+  this._entries.set(id, instanceOrDescriptor);
+  return result;
+  }
+  
+  forEach(callback: (id: ServiceIdentifier<any>, instanceOrDescriptor: any) => any): void {
+  this._entries.forEach((value, key) => callback(key, value));
+  }
+  
+  has(id: ServiceIdentifier<any>): boolean {
+  return this._entries.has(id);
+  }
+  
+  get<T>(id: ServiceIdentifier<T>): T | SyncDescriptor<T> {
+  return this._entries.get(id);
+  }
+  }
+  ```
+- 前文说到对象由容器自动实例化，实际上在 VSCode 中一些服务没有其他依赖（例如日志服务），仅被其他服务所依赖，所以可以手动实例化并注册到容器中。而这个例子中 AuthServiceImpl 还依赖 IRequestService，需要用 SyncDescriptor 封装一下保存在服务集中
+  
+  ```
+  const services = new ServiceCollection(); // 创建一个服务集
+  const logService = new LogService(); // 直接实例化一个服务
+  
+  services.set(ILogService, logService);
+  services.set(IAuthService, new SyncDescriptor(AuthServiceImpl)); // 第一个参数即服务的装饰器
+  ```
+- SyncDescriptor 是一个用于包装需要被容器实例化容器的描述符对象，它保存了对象的构造器和静态参数（需要被直接传递给构造函数）
+  
+  ```
+  export class SyncDescriptor<T> {
+  
+  readonly ctor: any;
+  readonly staticArguments: any[];
+  readonly supportsDelayedInstantiation: boolean;
+  
+  constructor(ctor: new (...args: any[]) => T, staticArguments: any[] = [], supportsDelayedInstantiation: boolean = false) {
+  this.ctor = ctor; // 服务的构造器
+  this.staticArguments = staticArguments; // 静态参数
+  this.supportsDelayedInstantiation = supportsDelayedInstantiation; // 是否支持延迟实例化
+  }
+  }
+  ```
+- 到这里我们可以创建容器并把服务注册到容器中了，VSCode 中容器是 InstantiationService
+  
+  ```
+  const instantiationService = new InstantiationService(services, true);
+  ```
+- InstantiationService 是依赖注入的核心，当服务被注册到容器后，我们需要先手动实例化程序入口，在 VSCode 中即是 CodeApplication，容器（instantiationService）保存着这些对象的依赖关系，所以 CodeApplication 也需要借助容器来实例化。
+  
+  ```
+  // 这里第二和第三个参数是 CodeApplication 构造器的静态参数，需要手动传递进去
+  instantiationService.createInstance(CodeApplication, mainIpcServer, instanceEnvironment).startup();
+  ```
+- 同时也可以手动获取服务实例，需要调用 instantiationService.invokeFunction 方法，传入一个回调函数，其参数是一个访问器，当通过访问器获取指定服务时，容器会自动去分析它所依赖的服务并自动实例化后返回。
+  
+  ```
+  instantiationService.invokeFunction(accessor => {
+  const logService = accessor.get(ILogService);
+  const authService = accessor.get(IAuthService);
+  });
+  ```
+- instantiationService 包含一个成员方法 createChild ，可以创建一个子容器，为了更好地划分依赖关系，子容器可以访问父容器中的服务实例，反之父容器则无法访问子容器的实例，当子容器中不存在所需要的服务实例时会调用 instantiationService._parent 获取父容器的引用并逐层往上查找依赖。
+- 以上是 VSCode 中实现依赖注入的基本用法，相比传统 Spring 等框架来说简单了不少，没有那么多种注入方式，不需要将依赖关系写到单独某个文件中，同时也提供了手动获取依赖及实例化的机制。
+- **总体来说，VSCode除了可以运用这种方式来实现Service的自动注入以外，还可以通过这种方式来自由地、灵活地加载在不同环境下的Service服务。**
+- ### 5.1.4.  实现原理
+- 一开始调用 createDecorator 函数定义了一个服务的装饰器，用于在构造函数中声明依赖关系以方便注入依赖。createDecorator 的主要作用是返回一个装饰器
+- ```
+  export function createDecorator<T>(serviceId: string): { (...args: any[]): void; type: T; } {
+  
+    // 已经保存过的服务会直接返回其装饰器
+  	if (_util.serviceIds.has(serviceId)) {
+  		return _util.serviceIds.get(serviceId)!;
+  	}
+  
+    // 声明装饰器
+  	const id = <any>function (target: Function, key: string, index: number): any {
+  		if (arguments.length !== 3) {
+  			throw new Error('@IServiceName-decorator can only be used to decorate a parameter');
+  		}
+      // 将服务作为依赖保存在为目标类的属性中
+  		storeServiceDependency(id, target, index, false);
+  	};
+  
+  	id.toString = () => serviceId;
+  
+  	_util.serviceIds.set(serviceId, id);
+  	return id;
+  }
+  ```
+- 同时调用 storeServiceDependency 函数将传入的服务 ID (唯一的字符串)及索引保存在所装饰类的一个成员 **$di$dependencies** 数组中
+  
+  ```
+  function storeServiceDependency(id: Function, target: Function, index: number, optional: boolean): void {
+  if (target[_util.DI_TARGET] === target) {
+  target[_util.DI_DEPENDENCIES].push({ id, index, optional });
+  } else {
+  target[_util.DI_DEPENDENCIES] = [{ id, index, optional }];
+  target[_util.DI_TARGET] = target;
+  }
+  }
+  ```
+- 其中 _util.DI_DEPENDENCIES 和 _util.DI_TARGET 分别是两个 magic string
+  
+  ```
+  export const DI_TARGET = '$di$target';
+  export const DI_DEPENDENCIES = '$di$dependencies';
+  ```
+- 对于第一个例子中 MyClass，其构造函数中的两个装饰器在编译时会被自动执行，并将依赖的服务记录到 $di$dependencies
+  
+  ```
+  MyClass['$di$dependencies'] = [
+  { id: 'AuthService', index: 0, optional: false },
+  { id: 'StorageService', index: 1, optional: false }
+  ];
+  
+  MyClass['$di$target'] = MyClass;
+  ```
+- 对于被装饰器装饰过的入参，会直接通过IoC容器被注入到对应的类中去。
+- ### 5.1.5.  资料总结
+- [https://zhuanlan.zhihu.com/p/60228431](https://zhuanlan.zhihu.com/p/60228431)
+- ## 5.2.  AMD机制
+- ### 5.2.1.  AMD和CMD的异同点
+- AMD规范采用异步方式加载模块，模块的加载不影响它后面语句的运行。所有依赖这个模块的语句，都定义在一个回调函数中，等到加载完成之后，这个回调函数才会运行。这里介绍用require.js实现AMD规范的模块化：用require.config()指定引用路径等，用definde()定义模块，用require()加载模块。
+- 首先我们需要引入require.js文件和一个入口文件main.js。main.js中配置require.config()并规定项目中用到的基础模块。
+  
+  ```
+  /** 网页中引入require.js及main.js **/
+  <script src="js/require.js" data-main="js/main"></script>
+  
+  /** main.js 入口文件/主模块 **/
+  // 首先用config()指定各模块路径和引用名
+  require.config({
+  baseUrl: "js/lib",
+  paths: {
+    "jquery": "jquery.min",  //实际路径为js/lib/jquery.min.js
+    "underscore": "underscore.min",
+  }
+  });
+  // 执行基本操作
+  require(["jquery","underscore"],function($,_){
+  // some code here
+  });
+  ```
+- 引用模块的时候，我们将模块名放在[]中作为reqiure()的第一参数；如果我们定义的模块本身也依赖其他模块,那就需要将它们放在[]中作为define()的第一参数。
+- ```
+  // 定义math.js模块
+  define(function () {
+      var basicNum = 0;
+      var add = function (x, y) {
+          return x + y;
+      };
+      return {
+          add: add,
+          basicNum :basicNum
+      };
+  });
+  
+  // 定义一个依赖underscore.js的模块
+  define(['underscore'],function(_){
+    var classify = function(list){
+      _.countBy(list,function(num){
+        return num > 30 ? 'old' : 'young';
+      })
+    };
+    return {
+      classify :classify
+    };
+  })
+  
+  // 引用模块，将模块放在[]内
+  require(['jquery', 'math'],function($, math){
+    var sum = math.add(10,20);
+    $("#sum").html(sum);
+  });
+  ```
+- CMD是另一种js模块化方案，它与AMD很类似，不同点在于：AMD推崇依赖前置、提前执行，CMD推崇依赖就近、延迟执行。此规范其实是在sea.js推广过程中产生的。
+  
+  ```
+  /** AMD写法 **/
+  define(["a", "b", "c", "d", "e", "f"], function(a, b, c, d, e, f) { 
+     // 等于在最前面声明并初始化了要用到的所有模块
+    a.doSomething();
+    if (false) {
+        // 即便没用到某个模块 b，但 b 还是提前执行了
+        b.doSomething()
+    } 
+  });
+  
+  /** CMD写法 **/
+  define(function(require, exports, module) {
+    var a = require('./a'); //在需要时申明
+    a.doSomething();
+    if (false) {
+        var b = require('./b');
+        b.doSomething();
+    }
+  });
+  
+  /** sea.js **/
+  // 定义模块 math.js
+  define(function(require, exports, module) {
+    var $ = require('jquery.js');
+    var add = function(a,b){
+        return a+b;
+    }
+    exports.add = add;
+  });
+  
+  // 加载模块
+  seajs.use(['math.js'], function(math){
+    var sum = math.add(1+2);
+  });
+  ```
+- ### 5.2.2.  vscode-loader
+- 在 vscode 的加载过程中，有这样一行代码值得注意，它位于 main.js 文件中，而这是 Electron App 运行的入口文件：
+  
+  ```
+  require('./bootstrap-amd').load('vs/code/electron-main/main', () => {
+    // ...
+  });
+  ```
+- vs/code/election-main/main 是 vscode 应用的主入口，这句代码的意思是加载主入口文件并执行。bootstrap-amd 文件暴露的 load 方法则又调用了 vs/loader 文件暴露的 loader 方法：
+  
+  ```
+  const loader = require('./vs/loader')
+  
+  exports.load = function (entrypoint, onLoad, onError) {
+    // ...
+    loader([entrypoint], onLoad, onError);
+  };
+  ```
+- loader.js中，被默认执行的是以下的代码：
+  
+  ```
+  export function init(): void {
+        if (typeof global.require !== 'undefined' || typeof require !== 'undefined') {
+            // 将原本 node.js 的 require 函数保存在这个局部变量中
+            const _nodeRequire = (global.require || require);
+            if (typeof _nodeRequire === 'function' && typeof _nodeRequire.resolve === 'function') {
+                // 然后在 RequireFunc 上挂在原来的 require 函数
+                const nodeRequire = ensureRecordedNodeRequire(moduleManager.getRecorder(), _nodeRequire);
+                global.nodeRequire = nodeRequire;
+                (<any>RequireFunc).nodeRequire = nodeRequire;
+                (<any>RequireFunc).__$__nodeRequire = nodeRequire;
+            }
+        }
+  
+        // 在 node.js 环境中（非 Electron 渲染进程环境）
+        if (env.isNode && !env.isElectronRenderer) {
+            module.exports = RequireFunc; // vscode-loader.js 文件导出 RequireFunc
+            require = <any>RequireFunc; // patch 全局 require 函数
+        } else {
+            if (!env.isElectronRenderer) {
+                global.define = DefineFunc; // patch 全局 define 函数
+            }
+            global.require = RequireFunc; // patch 全局 require 函数
+        }
+    }
+  
+    if (typeof global.define !== 'function' || !global.define.amd) {
+        moduleManager = new ModuleManager(env, createScriptLoader(env), DefineFunc, RequireFunc, Utilities.getHighPerformanceTimestamp());
+  
+        // The global variable require can configure the loader
+        if (typeof global.require !== 'undefined' && typeof global.require !== 'function') {
+            RequireFunc.config(global.require);
+        }
+  
+        // This define is for the local closure defined in node in the case that the loader is concatenated
+        define = function () {
+            return DefineFunc.apply(null, arguments);
+        };
+        define.amd = DefineFunc.amd;
+  
+        if (typeof doNotInitLoader === 'undefined') {
+            init();
+        }
+    }
+  ```
+	- 创建了一个 ScriptLoader，即脚本加载器，脚本加载器因代码运行环境而异，有 NodeScriptLoaderWorkScriptLoader 和 BrowserScriptLoader 三种，负责加载 js 文件
+	- 定义了 DefineFunc 和 RequireFunc，即模块化系统中的 define 函数和 require 函数，分别用于定义和加载一个模块
+	- 创建了一个 ModuleManager，即模块管理器，它用于按照正确的顺序来解析 js 文件并执行
+	- 覆盖了全局作用域中的 define 以及 require 变量（node 原生 require 变量的值被保存在 _nodeRequire 变量中）
+- **总体来说，vscode-loader使用了IIFE，实现了对不同环境下的js代码的模块依赖加载。**
+- ### 5.2.3.  资料总结
+- [https://zhuanlan.zhihu.com/p/367639259](https://zhuanlan.zhihu.com/p/367639259) （vscode-loader）
+- vscode-loader源代码仓库：[https://github.com/microsoft/vscode-loader](https://github.com/microsoft/vscode-loader)
+- ## 5.3.  LSP和DAP
+- ### 5.3.1.  LSP协议
+- LSP语言服务协议（Language Server Protocol）定义了一套编辑器或IDE与语言服务器之间的通信协议，用于实现诸如自动补全、代码跳转、查找引用等功能。通过这样的标准化协议，一个语言服务可以服用在多种开发工具之中，同时开发工具也只需要付出较小的代价就能实现多语言支持。
+- 为了解决这些问题，微软提供了语言服务器协议(Language Server Protocol)意图为语言插件和编辑器提供社区规范。这样一来，语言服务器就可以用任何一种语言来实现，用协议通讯也避免了插件在主进程中运行的高开销。而且任何LSP兼容的语言插件，都能和LSP兼容的代码编辑器整合起来，LSP是语言插件开发者和第三方编辑器的共赢方案。
+- 在 VS Code 中，语言服务器有两部分：
+	- 语言客户端：用 JavaScript / TypeScript 编写的普通 VS Code 扩展。此扩展可以访问所有VS Code 命名空间 API。
+	- 语言服务器：在单独进程中运行的语言分析工具。
+- LSP官网：[https://microsoft.github.io/language-server-protocol/](https://microsoft.github.io/language-server-protocol/)
+- ### 5.3.2.  实现LSP协议
+- 官方给了一个LSP协议实现的Demo，[https://github.com/Microsoft/vscode-extension-samples/tree/main/lsp-sample](https://github.com/Microsoft/vscode-extension-samples/tree/main/lsp-sample)
+- 可以看到整体文件结构如下：
+  
+  ```
+  .
+  ├── client // 语言客户端
+  │   ├── src
+  │   │   ├── test // 语言客户端到语言服务端的 end-to-end 测试
+  │   │   └── extension.ts // 语言客户端入口
+  ├── package.json // 扩展清单
+  └── server // 语言服务端
+    └── src
+        └── server.ts // 语言服务端入口
+  ```
+- 解释语言客户端
+- 让我们首先看一下根目录下的package.json，它描述了语言客户端的功能。其中有两个有趣的部分。
+  
+  ```
+  "activationEvents": [
+    "onLanguage:plaintext"
+  ]
+  ```
+- 这个部分告诉VSCode 在打开纯文本文件(例如带有扩展名.txt的文件)时立即激活这个extension。
+	- configuration：
+	  
+	  ```
+	  "configuration": {
+	   "type": "object",
+	   "title": "Example configuration",
+	   "properties": {
+	       "languageServerExample.maxNumberOfProblems": {
+	           "scope": "resource",
+	           "type": "number",
+	           "default": 100,
+	           "description": "Controls the maximum number of problems produced by the server."
+	       }
+	   }
+	  }
+	  ```
+- 这个部分为VSCode 提供配置设置。这些设置将会在语言服务器启动时和每次更改设置时发送到语言服务器。
+- 现在来看/client文件夹中语言客户端实际的代码和相应的package.json。/client/package.json中有趣的部分是它在engines字段里添加了一个 vscode 扩展托管API， 以及在 dependencies 字段里引入了vscode-languageclient库：
+  
+  ```
+  "engines": {
+    "vscode": "^1.1.18"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^4.1.4"
+  }
+  ```
+- 客户端被实现为普通的VS Code扩展，并且可以访问所有VS Code命名空间API。
+- 以下是相应的extension.ts文件的内容，该文件是lsp-sample extension的入口：
+  
+  ```
+  import * as path from 'path';
+  import { workspace, ExtensionContext } from 'vscode';
+  
+  import {
+  LanguageClient,
+  LanguageClientOptions,
+  ServerOptions,
+  TransportKind
+  } from 'vscode-languageclient';
+  
+  let client: LanguageClient;
+  
+  export function activate(context: ExtensionContext) {
+  // server是Node.js实现的
+  let serverModule = context.asAbsolutePath(
+  path.join('server', 'out', 'server.js')
+  );
+  // server默认的debug选项
+  // --inspect=6009: 在Node的Inspector模式下运行服务器，以便VS Code可以附加到服务器上进行调试
+  let debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] };
+  
+  // 如果扩展是在调试模式下启动的，则使用调试服务器选项
+  // 否则，将使用运行选项
+  let serverOptions: ServerOptions = {
+  run: { module: serverModule, transport: TransportKind.ipc },
+  debug: {
+  	module: serverModule,
+  	transport: TransportKind.ipc,
+  	options: debugOptions
+  }
+  };
+  
+  // 控制语言客户端的选项
+  let clientOptions: LanguageClientOptions = {
+  // 在服务器上注册纯文本文档
+  documentSelector: [{ scheme: 'file', language: 'plaintext' }],
+  synchronize: {
+      // 通知服务器有关工作区中包含的“ .clientrc”文件的文件更改
+  	fileEvents: workspace.createFileSystemWatcher('**/.clientrc')
+  }
+  };
+  
+  // 创建语言客户端，然后启动客户端。
+  client = new LanguageClient(
+  'languageServerExample',
+  'Language Server Example',
+  serverOptions,
+  clientOptions
+  );
+  
+  // 启动客户端。 这也将启动服务器
+  client.start();
+  }
+  
+  export function deactivate(): Thenable<void> | undefined {
+  if (!client) {
+  return undefined;
+  }
+  return client.stop();
+  }
+  ```
+- 解释语言服务器
+- 在这个示例中，服务器用TypeScript实现，并使用Node.js执行。因为VSCode 已经附带了一个Node.js runtime，所以没有必要提供你自己的，除非你有非常具体的要求runtime。
+- 语言服务器的源代码在/server。/server/package.json文件中有趣的部分是:
+  
+  ```
+  "dependencies": {
+    "vscode-languageserver": "^4.1.3"
+  }
+  ```
+- 这将拉入vscode-languageserver库。
+- 以下是使用提供的简单文本文档管理器的服务器实现，该管理器通过始终将文件的全部内容从VS Code发送到服务器来同步文本文档。
+  
+  ```
+  import {
+  createConnection,
+  TextDocuments,
+  Diagnostic,
+  DiagnosticSeverity,
+  ProposedFeatures,
+  InitializeParams,
+  DidChangeConfigurationNotification,
+  CompletionItem,
+  CompletionItemKind,
+  TextDocumentPositionParams,
+  TextDocumentSyncKind,
+  InitializeResult
+  } from 'vscode-languageserver';
+  
+  import {
+  TextDocument
+  } from 'vscode-languageserver-textdocument';
+  
+  // 为服务器创建连接。该连接使用Node的IPC作为传输。
+  // 还包括所有预览/建议的LSP功能。
+  let connection = createConnection(ProposedFeatures.all);
+  
+  // 创建一个简单的文本文档管理器。 文本文档管理器仅支持完整文档同步
+  let documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
+  
+  let hasConfigurationCapability: boolean = false;
+  let hasWorkspaceFolderCapability: boolean = false;
+  let hasDiagnosticRelatedInformationCapability: boolean = false;
+  
+  connection.onInitialize((params: InitializeParams) => {
+  let capabilities = params.capabilities;
+  
+  // Does the client support the `workspace/configuration` request?
+  // If not, we will fall back using global settings
+  hasConfigurationCapability = !!(
+    capabilities.workspace && !!capabilities.workspace.configuration
+  );
+  hasWorkspaceFolderCapability = !!(
+    capabilities.workspace && !!capabilities.workspace.workspaceFolders
+  );
+  hasDiagnosticRelatedInformationCapability = !!(
+    capabilities.textDocument &&
+    capabilities.textDocument.publishDiagnostics &&
+    capabilities.textDocument.publishDiagnostics.relatedInformation
+  );
+  
+  const result: InitializeResult = {
+    capabilities: {
+      textDocumentSync: TextDocumentSyncKind.Incremental,
+      // Tell the client that the server supports code completion
+      completionProvider: {
+        resolveProvider: true
+      }
+    }
+  };
+  if (hasWorkspaceFolderCapability) {
+    result.capabilities.workspace = {
+      workspaceFolders: {
+        supported: true
+      }
+    };
+  }
+  return result;
+  });
+  
+  connection.onInitialized(() => {
+  if (hasConfigurationCapability) {
+    // 注册所有配置更改。
+    connection.client.register(DidChangeConfigurationNotification.type, undefined);
+  }
+  if (hasWorkspaceFolderCapability) {
+    connection.workspace.onDidChangeWorkspaceFolders(_event => {
+      connection.console.log('Workspace folder change event received.');
+    });
+  }
+  });
+  
+  interface ExampleSettings {
+  maxNumberOfProblems: number;
+  }
+  
+  // 全局设置, 在客户端不支持`workspace/configuration`请求时使用
+  const defaultSettings: ExampleSettings = { maxNumberOfProblems: 1000 };
+  let globalSettings: ExampleSettings = defaultSettings;
+  
+  // 缓存所有打开的文档的设置
+  let documentSettings: Map<string, Thenable<ExampleSettings>> = new Map();
+  
+  connection.onDidChangeConfiguration(change => {
+  if (hasConfigurationCapability) {
+    // Reset all cached document settings
+    documentSettings.clear();
+  } else {
+    globalSettings = <ExampleSettings>(
+      (change.settings.languageServerExample || defaultSettings)
+    );
+  }
+  
+  // 重新验证所有打开的文本文档
+  documents.all().forEach(validateTextDocument);
+  });
+  
+  function getDocumentSettings(resource: string): Thenable<ExampleSettings> {
+  if (!hasConfigurationCapability) {
+    return Promise.resolve(globalSettings);
+  }
+  let result = documentSettings.get(resource);
+  if (!result) {
+  result = connection.workspace.getConfiguration({
+  	scopeUri: resource,
+  	section: 'languageServerExample'
+  });
+  documentSettings.set(resource, result);
+  }
+  return result;
+  }
+  
+  // 仅保留打开文档的设置
+  documents.onDidClose(e => {
+  documentSettings.delete(e.document.uri);
+  });
+  
+  // 文本文档的内容已更改。 首次打开文本文档或更改其内容时，将发出此事件。
+  documents.onDidChangeContent(change => {
+  validateTextDocument(change.document);
+  });
+  
+  async function validateTextDocument(textDocument: TextDocument): Promise<void> {
+  // 在这个简单的示例中，我们获取每个验证运行的设置。
+  let settings = await getDocumentSettings(textDocument.uri);
+  
+  // 验证器为所有长度大于等于2的大写单词创建诊断
+  let text = textDocument.getText();
+  let pattern = /\b[A-Z]{2,}\b/g;
+  let m: RegExpExecArray | null;
+  
+  let problems = 0;
+  let diagnostics: Diagnostic[] = [];
+  while ((m = pattern.exec(text)) && problems < settings.maxNumberOfProblems) {
+  problems++;
+  let diagnostic: Diagnostic = {
+  	severity: DiagnosticSeverity.Warning,
+  	range: {
+  		start: textDocument.positionAt(m.index),
+  		end: textDocument.positionAt(m.index + m[0].length)
+  	},
+  	message: `${m[0]} is all uppercase.`,
+  	source: 'ex'
+  };
+  if (hasDiagnosticRelatedInformationCapability) {
+  	diagnostic.relatedInformation = [
+  		{
+  			location: {
+  				uri: textDocument.uri,
+  				range: Object.assign({}, diagnostic.range)
+  			},
+  			message: 'Spelling matters'
+  		},
+  		{
+  			location: {
+  				uri: textDocument.uri,
+  				range: Object.assign({}, diagnostic.range)
+  			},
+  			message: 'Particularly for names'
+  		}
+  	];
+  }
+  diagnostics.push(diagnostic);
+  }
+  
+  // 将计算出的诊断信息发送到VSCode。
+  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+  }
+  
+  connection.onDidChangeWatchedFiles(_change => {
+  // 监视的文件在VSCode中有更改
+  connection.console.log('We received an file change event');
+  });
+  
+  // 该处理程序提供完成补全的初始列表。
+  connection.onCompletion(
+  (_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
+  // 参数包含在其中请求代码完成的文本文档的位置。对于示例，我们忽略此信息，并始终提供相同的完成项目。
+  return [
+  	{
+  		label: 'TypeScript',
+  		kind: CompletionItemKind.Text,
+  		data: 1
+  	},
+  	{
+  		label: 'JavaScript',
+  		kind: CompletionItemKind.Text,
+  		data: 2
+  	}
+  ];
+  }
+  );
+  
+  // 该处理程序为完成列表中选定的项目解析其他信息。
+  connection.onCompletionResolve(
+  (item: CompletionItem): CompletionItem => {
+  if (item.data === 1) {
+  	item.detail = 'TypeScript details';
+  	item.documentation = 'TypeScript documentation';
+  } else if (item.data === 2) {
+  	item.detail = 'JavaScript details';
+  	item.documentation = 'JavaScript documentation';
+  }
+  return item;
+  }
+  );
+  
+  //使文本文档管理器在连接上侦听打开，更改和关闭文本文档事件
+  documents.listen(connection);
+  
+  // 监听连接
+  connection.listen();
+  ```
+- ### 5.3.3.  DAP协议
+- 调试适配器协议（DAP）背后的想法是抽象开发工具的调试支持与调试器或运行时通信协议的方式。对于现有的调试器想要去快速去实现这套协议是不现实的，故我们宁愿去实现一个调试的中间层，即一个调试适配器，去使现有的调试器去适应这套调试适配器协议。 调试适配器协议让开发工具实现通用调试器成为可能，同时对应的调试器也可以通过调试适配器与不同的调试器通信。调试适配器可以在多个开发工具中重复使用，这大大减少了在不同工具中支持新调试器的工作量。
+  
+  ![](../../assets/VSCode解析/011_1695542520394-56a8510e-50e1-42ce-9d17-f7032b575c1a.png)
+- 从图可以看出，从左侧调试UI消息到达对应调试器（Debugger）中间通过Adaptor层统一进行消息的转换，一旦调试相关的消息通讯协议达到一定完成度，工具侧便可无需进行任何修改支持多个调试器中的调试逻辑。
+- ### 5.3.4.  DAP实现解析
+- 当我们在vscode中启动调试模式，实则执行了下面的command
+  
+  ```
+  export const DEBUG_START_COMMAND_ID = 'workbench.action.debug.start';
+  ```
+- 在对应的handler中可以看到，启动调试前先判断当时是否是调试模式，如果否，则通过editorService保存修改过的代码，这里的launch就保存了vscode launch.json的地址。
+  
+  ```
+  const { launch, name, getConfig } = debugService.getConfigurationManager().selectedConfiguration;
+  ```
+- 获取完debug配置信息后，传参并执行debugService的startDebugging
+- Src/vs/workbench/contrib/debug/browser/debugservice.ts
+  
+  ```
+  await this.extensionService.activateByEvent('onDebug');//激活插件
+  ....//中间一大段都是解析launch.json的替代变量，以及判断debugger是否添加到this.adapterManager内的debugger数组中
+  await this.createSession（...）//这里有两种情况，一种是launch.json中含有compound，一种是不含有compound标签
+  //createSession作用解析launch.json,获取debug的类型，执行需要预处理的task
+  ```
+- 在createSession里我们需要注意的是这里
+  
+  ```
+  const result = await this.doCreateSession(sessionId, launch?.workspace, { resolved: resolvedConfig, unresolved: unresolvedConfig }, options);
+  //doCreateSession作用实例化新的session，并完成初始化，注册session的监听器
+  ```
+- 实例化session后便开始向DA发出初始化的请求了
+  
+  ```
+  await this.launchOrAttachToSession(session);
+  ......
+  private async launchOrAttachToSession(session: IDebugSession, forceFocus = false): Promise<void> {
+  const dbgr = this.adapterManager.getDebugger(session.configuration.type);
+  try {
+  await session.initialize(dbgr!);
+  await session.launchOrAttach(session.configuration);
+  const launchJsonExists = !!session.root && !!this.configurationService.getValue<IGlobalConfig>('launch', { resource: session.root.uri });
+  await this.telemetry.logDebugSessionStart(dbgr!, launchJsonExists);
+  ```
+- Src/vs/workbench/contrib/debug/browser/rawDebugSession.ts
+  
+  ```
+  DebugProtocol.InitializeRequestArguments): Promise<DebugProtocol.InitializeResponse | undefined> {
+  const response = await this.send('initialize', args, undefined, undefined, false);
+                //这里的send就是通过DAP发送请求给DA
+  if (response) {
+  	this.mergeCapabilities(response.body);
+  }
+  
+  return response;
+  }
+  ```
+- 这里千万要注意Debugsession中的initialize执行完后不是直接执行launch（这里留个小坑后面补），而是先去执行初始化结束后的回调函数
+  
+  ```
+  this.rawListeners.push(this.raw.onDidInitialize(async () => {
+  aria.status(localize('debuggingStarted', "Debugging started."));
+  const sendConfigurationDone = async () => {
+  	if (this.raw && this.raw.capabilities.supportsConfigurationDoneRequest) {
+  		try {
+  			await this.raw.configurationDone();
+  		} catch (e) {
+  			// Disconnect the debug session on configuration done error #10596
+  			this.notificationService.error(e);
+  			if (this.raw) {
+  				this.raw.disconnect({});
+  			}
+  		}
+  	}
+  
+  	return undefined;
+  };
+  
+  // Send all breakpoints
+  try {
+  	await this.debugService.sendAllBreakpoints(this);
+  } finally {
+  	await sendConfigurationDone();
+  	await this.fetchThreads();
+  }
+  }));
+  ```
+- DAP流程（[https://link.zhihu.com/?target=https%3A//microsoft.github.io/debug-adapter-protocol/overview](https://link.zhihu.com/?target=https%3A//microsoft.github.io/debug-adapter-protocol/overview)）
+- ![](../../assets/VSCode解析/012_1709987768337-f1eeae50-e8fd-465d-b59e-18b644587a3e.png)
+- ### 5.3.5.  DAP和DA
+- DAP (Debug Adapter Protocol)具体的数据格式参考[这里](https://link.zhihu.com/?target=https%3A//microsoft.github.io/debug-adapter-protocol/specification)
+- DA（Debug Adapter）DA需要做些什么来通过DAP与vscode通信呢？
+- 首先我们先来看看DA的目录结构
+  
+  ![](../../assets/VSCode解析/013_1709989783310-1a2fd24a-1f19-4b7b-a7f8-9863c6a42648.png)
+- 这里只说明几个文件的作用
+	- debugSession.ts 分发请求、DA支持的功能等，自己可以通过继承该类实现自己的DA
+	- message.ts DA 响应数据的数据结构
+	- protocol.ts 处理接受的数据，响应请求、event的数据，通过DAP把数据发回给Vscode,
+	- runDebugAdapter.ts DA运行的方式
+- DA运行方式有两种
+	- 一种是通过node.js的.net模块来创建服务器，通过soket来传输参数
+	- 另一种进程，通过标准输入输出来传输参数
+	  
+	  ```
+	  if (port > 0) {
+	  // start as a server
+	  console.error(`waiting for debug protocol on port ${port}`);
+	  Net.createServer((socket) => {
+	  console.error('>> accepted connection from client');
+	  socket.on('end', () => {
+	  	console.error('>> client connection closed\n');
+	  });
+	  const session = new debugSession(false, true);
+	  session.setRunAsServer(true);
+	  session.start(socket, socket);
+	  }).listen(port);
+	  } else {
+	  
+	  // start a session
+	  //console.error('waiting for debug protocol on stdin/stdout');
+	  const session = new debugSession(false);
+	  process.on('SIGTERM', () => {
+	  session.shutdown();
+	  });
+	  session.start(process.stdin, process.stdout);
+	  }
+	  ```
+- 再来看看protocol.ts。start启动DA的session，监听输入输入流
+  
+  ```
+  public start(inStream: NodeJS.ReadableStream, outStream: NodeJS.WritableStream): void {
+  this._sequence = 1;
+  this._writableStream = outStream;
+  this._rawData = Buffer.alloc(0);
+  
+  inStream.on('data', (data: Buffer) => this._handleData(data));
+  
+  inStream.on('close', () => {
+  this._emitEvent(new Event('close'));
+  });
+  inStream.on('error', (error) => {
+  this._emitEvent(new Event('error', 'inStream error: ' + (error && error.message)));
+  });
+  
+  outStream.on('error', (error) => {
+  this._emitEvent(new Event('error', 'outStream error: ' + (error && error.message)));
+  });
+  
+  inStream.resume();
+  }
+  ```
+- 然后就是sendEvent、sendResponse、sendRequest了。它们都是通过
+  
+  ```
+  public onDidSendMessage: Event0<DebugProtocolMessage> = this._sendMessage.event;
+  ```
+- 来把数据传输给vscode。而在vscode端则是在创建DA的时候，注册ProtocolServer中的onDidSendMessage的事件。
+- Src/vs/workbench/api/common/extHostDebugService.ts
+  
+  ```
+  class DirectDebugAdapter extends AbstractDebugAdapter {
+  
+  constructor(private implementation: vscode.DebugAdapter) {
+  super();
+  
+  implementation.onDidSendMessage((message: vscode.DebugProtocolMessage) => {
+  	this.acceptMessage(message as DebugProtocol.ProtocolMessage);//这里接受DA的数据
+  });
+  }
+  .....
+  ```
+- ## 5.4.  Extension机制（扩展插件机制）
+- ### 5.4.1.  插件的加载
+- **插件宿主进程的加载**
+- 在src\vs\workbench\services\extensions\electron-sandbox\nativeExtensionService.ts文件中fork渲染进程，实例化ExtensionHostManager
+  
+  ```
+  class NativeExtensionService extends AbstractExtensionService implements IExtensionService {
+  constructor() {
+    ...
+  lifecycleService.when(LifecyclePhase.Ready).then(() => {
+  	// reschedule to ensure this runs after restoring viewlets, panels, and editors
+  	runWhenIdle(() => {
+  		this._initialize();
+  	}, 50 /*max delay*/);
+  });
+  }
+  ...
+  }
+  // src\vs\workbench\services\extensions\common\abstractExtensionService.ts
+  ......
+  protected async _initialize(): Promise<void> {
+  perf.mark('code/willLoadExtensions');
+  this._startExtensionHostsIfNecessary(true, []);
+  
+  const lock = await this._registry.acquireLock('_initialize');
+  try {
+  	const resolvedExtensions = await this._resolveExtensions();
+  
+  	this._processExtensions(lock, resolvedExtensions);
+  
+  	// Start extension hosts which are not automatically started
+  	const snapshot = this._registry.getSnapshot();
+  	for (const extHostManager of this._extensionHostManagers) {
+  		if (extHostManager.startup !== ExtensionHostStartup.EagerAutoStart) {
+  			const extensions = this._runningLocations.filterByExtensionHostManager(snapshot.extensions, extHostManager);
+  			extHostManager.start(snapshot.versionId, snapshot.extensions, extensions.map(extension => extension.identifier));
+  		}
+  	}
+  } finally {
+  	lock.dispose();
+  }
+  
+  this._releaseBarrier();
+  perf.mark('code/didLoadExtensions');
+  await this._handleExtensionTests();
+  }
+  ......
+  private _startExtensionHostsIfNecessary(isInitialStart: boolean, initialActivationEvents: string[]): void {
+  const locations: ExtensionRunningLocation[] = [];
+  for (let affinity = 0; affinity <= this._runningLocations.maxLocalProcessAffinity; affinity++) {
+  	locations.push(new LocalProcessRunningLocation(affinity));
+  }
+  for (let affinity = 0; affinity <= this._runningLocations.maxLocalWebWorkerAffinity; affinity++) {
+  	locations.push(new LocalWebWorkerRunningLocation(affinity));
+  }
+  locations.push(new RemoteRunningLocation());
+  for (const location of locations) {
+  	if (this._getExtensionHostManagerByRunningLocation(location)) {
+  		// already running
+  		continue;
+  	}
+  	const extHostManager = this._createExtensionHostManager(location, isInitialStart, initialActivationEvents);
+  	if (extHostManager) {
+  		this._extensionHostManagers.push(extHostManager);
+  	}
+  }
+  }
+  ......
+  ```
+- 在src/vs/workbench/services/extensions/common/extensionHostManager.ts文件中开始加载ExtensionHostProcess
+- 在src/vs/workbench/services/extensions/electron-browser/localProcessExtensionHost.ts中开始加载插件。
+- **创建插件进程**
+- src\vs\platform\extensions\common\extensionHostStarter.ts插件进程的接口定义
+- src\vs\platform\extensions\electron-main\extensionHostStarter.ts插件进程的接口实现
+- src\vs\platform\utilityProcess\electron-main\utilityProcess.ts插件进程流程的具体实现（在override start(configuration: IWindowUtilityProcessConfiguration): boolean函数方法里）
+- **激活插件**
+- src\vs\platform\extensionManagement\node\extensionsScannerService.ts  插件扫描入口
+- src\vs\platform\extensionManagement\common\extensionsScannerService.ts插件扫描逻辑的实现文件
+	- AbstractExtensionsScannerService类下定义了一系列关于扫描插件的类，主要包含了vscode自带在源码里的插件、product.json文件中builtInExtensions字段里的插件和系统用户.vscode里的插件。
+	- 激活插件的入口在src\vs\workbench\services\extensions\electron-sandbox\nativeExtensionService.ts文件下的745行
+- src\vs\workbench\api\common\extHostExtensionService.ts拿到插件数据之后，加载触发active接口
+	- private async _activateExtension是触发的入口函数
+	- _doActivateExtension是真正操作激活插件的函数方法
+	- _getEntryPoint读取插件中的package.json中main字段的入口函数
+	- AbstractExtHostExtensionService._callActivate插件入口加载完毕之后，触发active函数
+- ### 5.4.2.  插件宿主进程启动
+- 所谓插件主进程其实都是运行在插件宿主进程内的一个函数方法而已。因此可以说插件主进程都是运行在同一个进程中的。插件宿主进程又是一个工具进程，也可以认为是一个运行在nodejs中的进程。
+	- 众所周知，Electron框架中分为三种进程，一种是主进程，可以使用Electron中的api；一种是render进程，也就是渲染进程，可以使用一部分Electron中的api，加载了页面内容之后，就转为了v8引擎的环境；最后一种也就是跟render进程同一个级别的进程，也就是工具进程，是一种可以近似于视为运行在nodejs环境下的进程。
+- 插件宿主进程在主进程的起始位置在src\vs\workbench\workbench.desktop.main.ts位置中的 第88行位置。这是一个import文件的命令，因此进入到这个文件 src\vs\workbench\services\extensions\electron-sandbox\nativeExtensionService.ts之后，看到最后一行：
+  
+  ```
+  registerSingleton(IExtensionService, NativeExtensionService, InstantiationType.Eager);
+  ```
+- 这也就表示了，全局会注册并初始化唯一的一个NativeExtensionService。并且会在需要引用到这个类的时候会去初始化这个类。
+- 而真正在主进程中启动宿主插件进程的位置，在 **src\vs\platform\extensions\electron-main\extensionHostStarter.ts **位置中的100-117行内容中：
+  
+  ```
+  async start(id: string, opts: IExtensionHostProcessOptions): Promise<{ pid: number | undefined }> {
+  if (this._shutdown) {
+  	throw canceled();
+  }
+  const extHost = this._getExtHost(id);
+  extHost.start({
+  	...opts,
+  	type: 'extensionHost',
+  	entryPoint: 'vs/workbench/api/node/extensionHostProcess',
+  	args: ['--skipWorkspaceStorageLock'],
+  	execArgv: opts.execArgv,
+  	allowLoadingUnsignedLibraries: true,
+  	forceAllocationsToV8Sandbox: true,
+  	correlationId: id
+  });
+  const pid = await Event.toPromise(extHost.onSpawn);
+  return { pid };
+  }
+  ```
+- 这里面就确定了启动宿主插件进程的时候，需要传入的参数等等一系列的内容。也看到了启动插件宿主进程的起始位置：vs/workbench/api/node/extensionHostProcess
+- 来到这个文件中，我们可以看到这个文件真正运行的、最关键的一个方法和内容：
+  
+  ```
+  async function startExtensionHostProcess(): Promise<void> {
+  
+  // Print a console message when rejection isn't handled within N seconds. For details:
+  // see https://nodejs.org/api/process.html#process_event_unhandledrejection
+  // and https://nodejs.org/api/process.html#process_event_rejectionhandled
+  const unhandledPromises: Promise<any>[] = [];
+  process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  unhandledPromises.push(promise);
+  setTimeout(() => {
+  	const idx = unhandledPromises.indexOf(promise);
+  	if (idx >= 0) {
+  		promise.catch(e => {
+  			unhandledPromises.splice(idx, 1);
+  			if (!isCancellationError(e)) {
+  				console.warn(`rejected promise not handled within 1 second: ${e}`);
+  				if (e && e.stack) {
+  					console.warn(`stack trace: ${e.stack}`);
+  				}
+  				if (reason) {
+  					onUnexpectedError(reason);
+  				}
+  			}
+  		});
+  	}
+  }, 1000);
+  });
+  
+  process.on('rejectionHandled', (promise: Promise<any>) => {
+  const idx = unhandledPromises.indexOf(promise);
+  if (idx >= 0) {
+  	unhandledPromises.splice(idx, 1);
+  }
+  });
+  
+  // Print a console message when an exception isn't handled.
+  process.on('uncaughtException', function (err: Error) {
+  if (!isSigPipeError(err)) {
+  	onUnexpectedError(err);
+  }
+  });
+  
+  performance.mark(`code/extHost/willConnectToRenderer`);
+  const protocol = await createExtHostProtocol();
+  performance.mark(`code/extHost/didConnectToRenderer`);
+  const renderer = await connectToRenderer(protocol);
+  performance.mark(`code/extHost/didWaitForInitData`);
+  const { initData } = renderer;
+  // setup things
+  patchProcess(!!initData.environment.extensionTestsLocationURI); // to support other test frameworks like Jasmin that use process.exit (https://github.com/microsoft/vscode/issues/37708)
+  initData.environment.useHostProxy = args.useHostProxy !== undefined ? args.useHostProxy !== 'false' : undefined;
+  initData.environment.skipWorkspaceStorageLock = boolean(args.skipWorkspaceStorageLock, false);
+  
+  // host abstraction
+  const hostUtils = new class NodeHost implements IHostUtils {
+  declare readonly _serviceBrand: undefined;
+  public readonly pid = process.pid;
+  exit(code: number) { nativeExit(code); }
+  fsExists(path: string) { return Promises.exists(path); }
+  fsRealpath(path: string) { return realpath(path); }
+  };
+  
+  // Attempt to load uri transformer
+  let uriTransformer: IURITransformer | null = null;
+  if (initData.remote.authority && args.transformURIs) {
+  uriTransformer = createURITransformer(initData.remote.authority);
+  }
+  
+  const extensionHostMain = new ExtensionHostMain(
+  renderer.protocol,
+  initData,
+  hostUtils,
+  uriTransformer
+  );
+  
+  // rewrite onTerminate-function to be a proper shutdown
+  onTerminate = (reason: string) => extensionHostMain.terminate(reason);
+  }
+  
+  startExtensionHostProcess().catch((err) => console.log(err));
+  ```
+- 其实启动宿主进程的核心，在文件的395-400行（上述代码的68-72）。之前的代码都是在做准备工作，比如监听本进程的一些事件，构建通信等等。
+- 然后我们关注一下这个 **ExtensionHostMain** 类的构造函数：
+  
+  ```
+  constructor(
+  protocol: IMessagePassingProtocol,
+  initData: IExtensionHostInitData,
+  hostUtils: IHostUtils,
+  uriTransformer: IURITransformer | null,
+  messagePorts?: ReadonlyMap<string, MessagePort>
+  ) {
+  this._hostUtils = hostUtils;
+  this._rpcProtocol = new RPCProtocol(protocol, null, uriTransformer);
+  
+  // ensure URIs are transformed and revived
+  initData = ExtensionHostMain._transform(initData, this._rpcProtocol);
+  
+  // bootstrap services
+  const services = new ServiceCollection(...getSingletonServiceDescriptors());
+  services.set(IExtHostInitDataService, { _serviceBrand: undefined, ...initData, messagePorts });
+  services.set(IExtHostRpcService, new ExtHostRpcService(this._rpcProtocol));
+  services.set(IURITransformerService, new URITransformerService(uriTransformer));
+  services.set(IHostUtils, hostUtils);
+  
+  const instaService: IInstantiationService = new InstantiationService(services, true);
+  
+  instaService.invokeFunction(ErrorHandler.installEarlyHandler);
+  
+  // ugly self - inject
+  this._logService = instaService.invokeFunction(accessor => accessor.get(ILogService));
+  
+  performance.mark(`code/extHost/didCreateServices`);
+  if (this._hostUtils.pid) {
+  	this._logService.info(`Extension host with pid ${this._hostUtils.pid} started`);
+  } else {
+  	this._logService.info(`Extension host started`);
+  }
+  this._logService.trace('initData', initData);
+  
+  // ugly self - inject
+  // must call initialize *after* creating the extension service
+  // because `initialize` itself creates instances that depend on it
+  this._extensionService = instaService.invokeFunction(accessor => accessor.get(IExtHostExtensionService));
+  this._extensionService.initialize();
+  
+  // install error handler that is extension-aware
+  instaService.invokeFunction(ErrorHandler.installFullHandler);
+  }
+  ```
+- 最关键的初始化，就在 this._extensionService.initialize() 这一句中。看一下这个方法的具体实现：
+  
+  ```
+  public async initialize(): Promise<void> {
+  try {
+  
+  	await this._beforeAlmostReadyToRunExtensions();
+  	this._almostReadyToRunExtensions.open();
+  
+  	await this._extHostWorkspace.waitForInitializeCall();
+  	performance.mark('code/extHost/ready');
+  	this._readyToStartExtensionHost.open();
+  
+  	if (this._initData.autoStart) {
+  		this._startExtensionHost();
+  	}
+  } catch (err) {
+  	errors.onUnexpectedError(err);
+  }
+  }
+  ```
+	- 这个实现还不好找。跳转之后，首先是一个接口实现。再次跳转就失效了。但是具体的实现就在那个文件内，可以使用文件内搜索。
+- 根据这段代码的命名方式，我们可以看出来，宿主进程的启动在 this._startExtensionHost() 中。
+  
+  ```
+  private _startExtensionHost(): Promise<void> {
+  if (this._started) {
+  	throw new Error(`Extension host is already started!`);
+  }
+  this._started = true;
+  
+  return this._readyToStartExtensionHost.wait()
+  	.then(() => this._readyToRunExtensions.open())
+  	.then(() => {
+  		// wait for all activation events that came in during workbench startup, but at maximum 1s
+  		return Promise.race([this._activator.waitForActivatingExtensions(), timeout(1000)]);
+  	})
+  	.then(() => this._handleEagerExtensions())
+  	.then(() => {
+  		this._eagerExtensionsActivated.open();
+  		this._logService.info(`Eager extensions activated`);
+  	});
+  }
+  ```
+- 插件宿主进程其实到这个阶段已经初始化的差不多了，也就是准备的差不多了。那么插件宿主进程最最重要的任务是什么？那就是**加载插件**！在这个阶段，其实就是需要加载各种各样需要加载的插件。
+- 这里面比较重要的一个方法就是：this._handleEagerExtensions()。这是最早一批插件加载的入口。
+  
+  ```
+  private _handleEagerExtensions(): Promise<void> {
+  const starActivation = this._activateByEvent('*', true).then(undefined, (err) => {
+  	this._logService.error(err);
+  });
+  
+  this._register(this._extHostWorkspace.onDidChangeWorkspace((e) => this._handleWorkspaceContainsEagerExtensions(e.added)));
+  const folders = this._extHostWorkspace.workspace ? this._extHostWorkspace.workspace.folders : [];
+  const workspaceContainsActivation = this._handleWorkspaceContainsEagerExtensions(folders);
+  const remoteResolverActivation = this._handleRemoteResolverEagerExtensions();
+  const eagerExtensionsActivation = Promise.all([remoteResolverActivation, starActivation, workspaceContainsActivation]).then(() => { });
+  
+  Promise.race([eagerExtensionsActivation, timeout(10000)]).then(() => {
+  	this._activateAllStartupFinished();
+  });
+  
+  return eagerExtensionsActivation;
+  }
+  ```
+- 这里面我们可以关注到 this._activateByEvent('*', true) 这样一句。这句话就预示着，这里面就是加载各种各样event为*的插件。而_activateByEvent就是加载各种各样插件的具体操作方法！
+- 我们顺藤摸瓜，一路找到位于src\vs\workbench\api\common\extHostExtensionActivator.ts文件中的activateByEvent方法：
+  
+  ```
+  public async activateByEvent(activationEvent: string, startup: boolean): Promise<void> {
+  if (this._alreadyActivatedEvents[activationEvent]) {
+  	return;
+  }
+  
+  const activateExtensions = this._registry.getExtensionDescriptionsForActivationEvent(activationEvent);
+  await this._activateExtensions(activateExtensions.map(e => ({
+  	id: e.identifier,
+  	reason: { startup, extensionId: e.identifier, activationEvent }
+  })));
+  
+  this._alreadyActivatedEvents[activationEvent] = true;
+  }
+  ```
+- 那么我们也可以看到具体的插件激活的方法 this._activateExtensions 。再次继续下去。
+  
+  ```
+  private async _activateExtensions(extensions: ActivationIdAndReason[]): Promise<void> {
+  const operations = extensions
+  	.filter((p) => !this.isActivated(p.id))
+  	.map(ext => this._handleActivationRequest(ext));
+  await Promise.all(operations.map(op => op.wait()));
+  }
+  ```
+- 我们需要继续追踪_handleActivationRequest。找到这个方法之后，可以看到里面就比较长了。
+  
+  ```
+  private _handleActivationRequest(currentActivation: ActivationIdAndReason): ActivationOperation {
+  if (this._operations.has(currentActivation.id)) {
+  	return this._operations.get(currentActivation.id)!;
+  }
+  
+  if (this._isHostExtension(currentActivation.id)) {
+  	return this._createAndSaveOperation(currentActivation, null, [], null);
+  }
+  
+  const currentExtension = this._registry.getExtensionDescription(currentActivation.id);
+  if (!currentExtension) {
+  	// Error condition 0: unknown extension
+  	const error = new Error(`Cannot activate unknown extension '${currentActivation.id.value}'`);
+  	const result = this._createAndSaveOperation(currentActivation, null, [], new FailedExtension(error));
+  	this._host.onExtensionActivationError(
+  		currentActivation.id,
+  		error,
+  		new MissingExtensionDependency(currentActivation.id.value)
+  	);
+  	return result;
+  }
+  
+  const deps: ActivationOperation[] = [];
+  const depIds = (typeof currentExtension.extensionDependencies === 'undefined' ? [] : currentExtension.extensionDependencies);
+  for (const depId of depIds) {
+  
+  	if (this._isResolvedExtension(depId)) {
+  		// This dependency is already resolved
+  		continue;
+  	}
+  
+  	const dep = this._operations.get(depId);
+  	if (dep) {
+  		deps.push(dep);
+  		continue;
+  	}
+  
+  	if (this._isHostExtension(depId)) {
+  		// must first wait for the dependency to activate
+  		deps.push(this._handleActivationRequest({
+  			id: this._globalRegistry.getExtensionDescription(depId)!.identifier,
+  			reason: currentActivation.reason
+  		}));
+  		continue;
+  	}
+  
+  	const depDesc = this._registry.getExtensionDescription(depId);
+  	if (depDesc) {
+  		if (!depDesc.main && !depDesc.browser) {
+  			// this dependency does not need to activate because it is descriptive only
+  			continue;
+  		}
+  
+  		// must first wait for the dependency to activate
+  		deps.push(this._handleActivationRequest({
+  			id: depDesc.identifier,
+  			reason: currentActivation.reason
+  		}));
+  		continue;
+  	}
+  
+  	// Error condition 1: unknown dependency
+  	const currentExtensionFriendlyName = currentExtension.displayName || currentExtension.identifier.value;
+  	const error = new Error(`Cannot activate the '${currentExtensionFriendlyName}' extension because it depends on unknown extension '${depId}'`);
+  	const result = this._createAndSaveOperation(currentActivation, currentExtension.displayName, [], new FailedExtension(error));
+  	this._host.onExtensionActivationError(
+  		currentExtension.identifier,
+  		error,
+  		new MissingExtensionDependency(depId)
+  	);
+  	return result;
+  }
+  
+  return this._createAndSaveOperation(currentActivation, currentExtension.displayName, deps, null);
+  }
+  ```
+- 其实这么长的代码中，我们不能一下就看到真正启动插件的下一个入口在哪里。但是我们可以从返回上来看，那就是基本锁定，_createAndSaveOperation方法。但是这个方法中其实就干了一个事，那就是等待初始化 ActivationOperation 这样一个对象。一开始，我觉得不可思议，怎么可能呢？但是排查到最后，真就是这里。
+- 这个对象的构造函数中有一个_initialize方法。方法中只有一个值得细看，那就是_waitForDepsThenActivate方法。
+  
+  ```
+  private async _waitForDepsThenActivate(): Promise<void> {
+  if (this._value) {
+  	// this operation is already finished
+  	return;
+  }
+  
+  while (this._deps.length > 0) {
+  	// remove completed deps
+  	for (let i = 0; i < this._deps.length; i++) {
+  		const dep = this._deps[i];
+  
+  		if (dep.value && !dep.value.activationFailed) {
+  			// the dependency is already activated OK
+  			this._deps.splice(i, 1);
+  			i--;
+  			continue;
+  		}
+  
+  		if (dep.value && dep.value.activationFailed) {
+  			// Error condition 2: a dependency has already failed activation
+  			const error = new Error(`Cannot activate the '${this.friendlyName}' extension because its dependency '${dep.friendlyName}' failed to activate`);
+  			(<any>error).detail = dep.value.activationFailedError;
+  			this._value = new FailedExtension(error);
+  			this._host.onExtensionActivationError(this._id, error, null);
+  			return;
+  		}
+  	}
+  
+  	if (this._deps.length > 0) {
+  		// wait for one dependency
+  		await Promise.race(this._deps.map(dep => dep.wait()));
+  	}
+  }
+  
+  await this._activate();
+  }
+  
+  private async _activate(): Promise<void> {
+  try {
+  	this._value = await this._host.actualActivateExtension(this._id, this._reason);
+  } catch (err) {
+  
+  	const error = new Error();
+  	if (err && err.name) {
+  		error.name = err.name;
+  	}
+  	if (err && err.message) {
+  		error.message = `Activating extension '${this._id.value}' failed: ${err.message}.`;
+  	} else {
+  		error.message = `Activating extension '${this._id.value}' failed: ${err}.`;
+  	}
+  	if (err && err.stack) {
+  		error.stack = err.stack;
+  	}
+  
+  	// Treat the extension as being empty
+  	this._value = new FailedExtension(error);
+  
+  	if (this._isDisposed && errors.isCancellationError(err)) {
+  		// It is expected for ongoing activations to fail if the extension host is going down
+  		// So simply ignore and don't log canceled errors in this case
+  		return;
+  	}
+  
+  	this._host.onExtensionActivationError(this._id, error, null);
+  	this._logService.error(`Activating extension ${this._id.value} failed due to an error:`);
+  	this._logService.error(err);
+  }
+  }
+  ```
+- 上述代码中有两个方法，这两个方法就是具体激活的地方。这里就离真正启动插件主进程的地方很近很近了！也就是actualActivateExtension。这个方法定义的地方也很鸡贼，不是特别的寻常。
+  
+  ```
+  this._activator = this._register(new ExtensionsActivator(
+  	this._myRegistry,
+  	this._globalRegistry,
+  	{
+  		onExtensionActivationError: (extensionId: ExtensionIdentifier, error: Error, missingExtensionDependency: MissingExtensionDependency | null): void => {
+  			this._mainThreadExtensionsProxy.$onExtensionActivationError(extensionId, errors.transformErrorForSerialization(error), missingExtensionDependency);
+  		},
+  
+  		actualActivateExtension: async (extensionId: ExtensionIdentifier, reason: ExtensionActivationReason): Promise<ActivatedExtension> => {
+  			if (ExtensionDescriptionRegistry.isHostExtension(extensionId, this._myRegistry, this._globalRegistry)) {
+  				await this._mainThreadExtensionsProxy.$activateExtension(extensionId, reason);
+  				return new HostExtension();
+  			}
+  			const extensionDescription = this._myRegistry.getExtensionDescription(extensionId)!;
+  			return this._activateExtension(extensionDescription, reason);
+  		}
+  	},
+  	this._logService
+  ));
+  ```
+- 也就是说实在extHostExtensionActivator创建的时候，作为初始化参数传进去的。
+- 我们随着this._activateExtension这个线继续。后续我们会找到_doActivateExtension这个方法
+  
+  ```
+  private _doActivateExtension(extensionDescription: IExtensionDescription, reason: ExtensionActivationReason): Promise<ActivatedExtension> {
+  const event = getTelemetryActivationEvent(extensionDescription, reason);
+  type ActivatePluginClassification = {
+  	owner: 'jrieken';
+  	comment: 'Data about how/why an extension was activated';
+  } & TelemetryActivationEventFragment;
+  this._mainThreadTelemetryProxy.$publicLog2<TelemetryActivationEvent, ActivatePluginClassification>('activatePlugin', event);
+  const entryPoint = this._getEntryPoint(extensionDescription);
+  if (!entryPoint) {
+  	// Treat the extension as being empty => NOT AN ERROR CASE
+  	return Promise.resolve(new EmptyExtension(ExtensionActivationTimes.NONE));
+  }
+  
+  this._logService.info(`ExtensionService#_doActivateExtension ${extensionDescription.identifier.value}, startup: ${reason.startup}, activationEvent: '${reason.activationEvent}'${extensionDescription.identifier.value !== reason.extensionId.value ? `, root cause: ${reason.extensionId.value}` : ``}`);
+  this._logService.flush();
+  
+  const activationTimesBuilder = new ExtensionActivationTimesBuilder(reason.startup);
+  return Promise.all([
+  	this._loadCommonJSModule<IExtensionModule>(extensionDescription, joinPath(extensionDescription.extensionLocation, entryPoint), activationTimesBuilder),
+  	this._loadExtensionContext(extensionDescription)
+  ]).then(values => {
+  	performance.mark(`code/extHost/willActivateExtension/${extensionDescription.identifier.value}`);
+  	return AbstractExtHostExtensionService._callActivate(this._logService, extensionDescription.identifier, values[0], values[1], activationTimesBuilder);
+  }).then((activatedExtension) => {
+  	performance.mark(`code/extHost/didActivateExtension/${extensionDescription.identifier.value}`);
+  	return activatedExtension;
+  });
+  }
+  ```
+- 这里最重要的部分，莫过于最终的Promise.all中的一些内容了。这里面的大致流程就是：
+	- 1. 加载JS模块和加载插件所需要的上下文。
+	- 2. 激活插件
+	- 3. 返回激活插件的信息
+- 那么激活插件的具体步骤就在这第2步里面了：
+  
+  ```
+  private static _callActivate(logService: ILogService, extensionId: ExtensionIdentifier, extensionModule: IExtensionModule, context: vscode.ExtensionContext, activationTimesBuilder: ExtensionActivationTimesBuilder): Promise<ActivatedExtension> {
+  // Make sure the extension's surface is not undefined
+  extensionModule = extensionModule || {
+  	activate: undefined,
+  	deactivate: undefined
+  };
+  
+  return this._callActivateOptional(logService, extensionId, extensionModule, context, activationTimesBuilder).then((extensionExports) => {
+  	return new ActivatedExtension(false, null, activationTimesBuilder.build(), extensionModule, extensionExports, context.subscriptions);
+  });
+  }
+  
+  private static _callActivateOptional(logService: ILogService, extensionId: ExtensionIdentifier, extensionModule: IExtensionModule, context: vscode.ExtensionContext, activationTimesBuilder: ExtensionActivationTimesBuilder): Promise<IExtensionAPI> {
+  if (typeof extensionModule.activate === 'function') {
+  	try {
+  		activationTimesBuilder.activateCallStart();
+  		logService.trace(`ExtensionService#_callActivateOptional ${extensionId.value}`);
+  		const scope = typeof global === 'object' ? global : self; // `global` is nodejs while `self` is for workers
+  		const activateResult: Promise<IExtensionAPI> = extensionModule.activate.apply(scope, [context]);
+  		activationTimesBuilder.activateCallStop();
+  
+  		activationTimesBuilder.activateResolveStart();
+  		return Promise.resolve(activateResult).then((value) => {
+  			activationTimesBuilder.activateResolveStop();
+  			return value;
+  		});
+  	} catch (err) {
+  		return Promise.reject(err);
+  	}
+  } else {
+  	// No activate found => the module is the extension's exports
+  	return Promise.resolve<IExtensionAPI>(extensionModule);
+  }
+  }
+  ```
+- 在这里面就可以看到最最关键的一步了： extensionModule.activate.apply(scope, [context]);
+- 这一步就是启动插件的步骤了。这也是为什么插件中，入口文件的起始函数名字必须要activate。这里也解释了为什么vscode模块可以被引入到插件中。因为本质上，插件主进程就是运行在一个由vscode构建上下文的方法。
+- 到此为止，其实就可以基本确定和知道，所有插件的主进程都是在一个进程中的。因此，插件的主进程只不过是插件宿主进程中的一个线程罢了。如果线程过多，插件过多，势必会影响到应用的运行。
+- ### 5.4.3.  奇特的vscode模块
+- 在编写插件的时候，会经常用到vscode这一个模块。实际上这是一个虚拟模块，是不存在的。
+- 通过对require('vscode')的过程进行debug，可以发现问题。
+  
+  ```
+  // ref: src/vs/workbench/api/node/extHost.api.impl.ts
+  function defineAPI(factory: IExtensionApiFactory, extensionPaths: TernarySearchTree<IExtensionDescription>): void {
+  
+  // each extension is meant to get its own api implementation
+  const extApiImpl = new Map<string, typeof vscode>();
+  let defaultApiImpl: typeof vscode;
+  
+  const node_module = <any>require.__$__nodeRequire('module');
+  const original = node_module._load;
+  node_module._load = function load(request, parent, isMain) {
+    if (request !== 'vscode') {
+      return original.apply(this, arguments);
+    }
+  
+    // get extension id from filename and api for extension
+    const ext = extensionPaths.findSubstr(parent.filename);
+    if (ext) {
+      let apiImpl = extApiImpl.get(ext.id);
+      if (!apiImpl) {
+        apiImpl = factory(ext);
+        extApiImpl.set(ext.id, apiImpl);
+      }
+      return apiImpl;
+    }
+  
+    // fall back to a default implementation
+    if (!defaultApiImpl) {
+      defaultApiImpl = factory(nullExtensionDescription);
+    }
+    return defaultApiImpl;
+  };
+  }
+  ```
+- Module._load()方法被劫持了，遇到vscode返回一个apiImpl虚拟模块。注意，每个插件拿到的VSCODE  API都是单独的实例。
+- 从上面插件宿主进程的启动流程中也可以一窥究竟。vscode模块实际上就是一个d.ts。就好比是C++中的头文件，只是声明了有哪些方法可以调用，以及这些方法中有什么样的参数。实际实现并不在其中。
+- ### 5.4.4.  有限扩展的插件
+- VSCode 中对外的插件是 extension，使用的都是 VSCode 开放的 api 来交互，能使用的能力是被约束和规范化的。而内部内置的插件是 contrib，它通过调用一系列更加底层的 API 来扩展 VSCode 的能力，代码在相应层的 contrib下存放。
+- 也就是说，在VSCode内部存在着两部分的扩展机制。这里就可以更加深入的去研究插件和框架的设计边界和协同。
+- ## 5.5.  VSCode进程间通信构建过程详解
+- ### 5.5.1.  基于MessagePortMain（通信桥）的通信实现
+- 根据[Electron的文档](https://www.electronjs.org/zh/docs/latest/api/message-port-main)，我们可以知道，在Electron框架中实现进程间通信有两种方式，第一种是常见的IPCMain和IPCRender，这是主进程和渲染进程或者是工具进程（UtilityProcess）的通信通道，特点是通信所有权不可转让。第二种就是MessagePortMain，也就是通信桥。其最大的特点就是通信所有权可以转让，实现更加灵活。
+- 看如下的源码：
+  
+  ```
+  connect(payload?: unknown): Electron.MessagePortMain {
+  const { port1: outPort, port2: utilityProcessPort } = new MessageChannelMain();
+  this.postMessage(payload, [utilityProcessPort]);
+  
+  return outPort;
+  }
+  ```
+	- 这段代码是在主进程中运行的。主要的功能就是创建一个和子进程联通的通信桥，然后将主进程端的通信所有权移交给其他进程。
+- 第一种通信实现，是基于Electron IPC的，而第二种则是基于Node IPC了。这也是5.3节中为什么渲染进程和共享进程以及渲染进程和Extension Host等之间的通信是Node IPC。这是因为主进程不仅创建了对应的子进程，而且通过这种通信桥的通信实现，将对应的沟通通道转接了其他的进程。
+- ### 5.5.2.  Caller-Service机制
+  
+  ![](../../assets/VSCode解析/014_1709349158444-2597db9a-32ce-4e0b-a3a6-eeaa5aee1061.png)
+- VSCode的很多概念都被包装成了Service，因此这一小节讲一下Caller-Service机制，即服务调用的最基本的机制。
+- 部分Service实际上是基于IServerChannel进行了包裹，本质上就是一个对Caller（请求方）的进行响应的Service。结合3.3.1节的描述，可以做出如下的结论：
+	- Protocol是基于不同场景下实现的真实通信信道，比如：基于Electron的ipcMain和ipcRender构建的信道，或者基于Electron的MessagePortMain构建的信道，这些都是框架赋予的基本信道，是真实存在的，而其他的概念都是基于逻辑衍生出来的逻辑处理。
+	- IChannel是一个请求发送的请求者，Client就是实际发送请求的人。Client除了替IChannel发送请求之外，在具体的是线上，Client还会保存一个接收到响应之后的handler，用于处理收到对应的响应消息。
+	- IServerChannel是一个与IChannel相对应的请求处理者，IChannelServer是根据传过来的消息，将请求发送给对应ServerChannel处理的请求路由。
+	- Service和Caller就是分别基于IServerChannel和IChannel构建出来的具体的服务逻辑。
+	- Caller-Service机制就是一个请求-响应-处理响应的单向消息传递机制。
+- ### 5.5.3.  ChannelClient-ChannelServer源码解析
+- 首先看ChannelClient的源码：
+  
+  ```
+  export class ChannelClient implements IChannelClient, IDisposable {
+  
+  private isDisposed: boolean = false;
+  private state: State = State.Uninitialized;
+  private activeRequests = new Set<IDisposable>();
+  private handlers = new Map<number, IHandler>();
+  private lastRequestId: number = 0;
+  private protocolListener: IDisposable | null;
+  private logger: IIPCLogger | null;
+  
+  private readonly _onDidInitialize = new Emitter<void>();
+  readonly onDidInitialize = this._onDidInitialize.event;
+  
+  constructor(private protocol: IMessagePassingProtocol, logger: IIPCLogger | null = null) {
+  this.protocolListener = this.protocol.onMessage(msg => this.onBuffer(msg));
+  this.logger = logger;
+  }
+  
+  getChannel<T extends IChannel>(channelName: string): T {
+  const that = this;
+  
+  return {
+  	call(command: string, arg?: any, cancellationToken?: CancellationToken) {
+  		if (that.isDisposed) {
+  			return Promise.reject(new CancellationError());
+  		}
+  		return that.requestPromise(channelName, command, arg, cancellationToken);
+  	},
+  	listen(event: string, arg: any) {
+  		if (that.isDisposed) {
+  			return Event.None;
+  		}
+  		return that.requestEvent(channelName, event, arg);
+  	}
+  } as T;
+  }
+  
+  private requestPromise(channelName: string, name: string, arg?: any, cancellationToken = CancellationToken.None): Promise<any> {
+  const id = this.lastRequestId++;
+  const type = RequestType.Promise;
+  const request: IRawRequest = { id, type, channelName, name, arg };
+  
+  if (cancellationToken.isCancellationRequested) {
+  	return Promise.reject(new CancellationError());
+  }
+  
+  let disposable: IDisposable;
+  
+  const result = new Promise((c, e) => {
+  	if (cancellationToken.isCancellationRequested) {
+  		return e(new CancellationError());
+  	}
+  
+  	const doRequest = () => {
+  		const handler: IHandler = response => {
+  			switch (response.type) {
+  				case ResponseType.PromiseSuccess:
+  					this.handlers.delete(id);
+  					c(response.data);
+  					break;
+  
+  				case ResponseType.PromiseError: {
+  					this.handlers.delete(id);
+  					const error = new Error(response.data.message);
+  					(<any>error).stack = Array.isArray(response.data.stack) ? response.data.stack.join('\n') : response.data.stack;
+  					error.name = response.data.name;
+  					e(error);
+  					break;
+  				}
+  				case ResponseType.PromiseErrorObj:
+  					this.handlers.delete(id);
+  					e(response.data);
+  					break;
+  			}
+  		};
+  
+  		this.handlers.set(id, handler);
+  		this.sendRequest(request);
+  	};
+  
+  	let uninitializedPromise: CancelablePromise<void> | null = null;
+  	if (this.state === State.Idle) {
+  		doRequest();
+  	} else {
+  		uninitializedPromise = createCancelablePromise(_ => this.whenInitialized());
+  		uninitializedPromise.then(() => {
+  			uninitializedPromise = null;
+  			doRequest();
+  		});
+  	}
+  
+  	const cancel = () => {
+  		if (uninitializedPromise) {
+  			uninitializedPromise.cancel();
+  			uninitializedPromise = null;
+  		} else {
+  			this.sendRequest({ id, type: RequestType.PromiseCancel });
+  		}
+  
+  		e(new CancellationError());
+  	};
+  
+  	const cancellationTokenListener = cancellationToken.onCancellationRequested(cancel);
+  	disposable = combinedDisposable(toDisposable(cancel), cancellationTokenListener);
+  	this.activeRequests.add(disposable);
+  });
+  
+  return result.finally(() => {
+  	disposable.dispose();
+  	this.activeRequests.delete(disposable);
+  });
+  }
+  
+  private requestEvent(channelName: string, name: string, arg?: any): Event<any> {
+  const id = this.lastRequestId++;
+  const type = RequestType.EventListen;
+  const request: IRawRequest = { id, type, channelName, name, arg };
+  
+  let uninitializedPromise: CancelablePromise<void> | null = null;
+  
+  const emitter = new Emitter<any>({
+  	onWillAddFirstListener: () => {
+  		uninitializedPromise = createCancelablePromise(_ => this.whenInitialized());
+  		uninitializedPromise.then(() => {
+  			uninitializedPromise = null;
+  			this.activeRequests.add(emitter);
+  			this.sendRequest(request);
+  		});
+  	},
+  	onDidRemoveLastListener: () => {
+  		if (uninitializedPromise) {
+  			uninitializedPromise.cancel();
+  			uninitializedPromise = null;
+  		} else {
+  			this.activeRequests.delete(emitter);
+  			this.sendRequest({ id, type: RequestType.EventDispose });
+  		}
+  	}
+  });
+  
+  const handler: IHandler = (res: IRawResponse) => emitter.fire((res as IRawEventFireResponse).data);
+  this.handlers.set(id, handler);
+  
+  return emitter.event;
+  }
+  
+  private sendRequest(request: IRawRequest): void {
+  switch (request.type) {
+  	case RequestType.Promise:
+  	case RequestType.EventListen: {
+  		const msgLength = this.send([request.type, request.id, request.channelName, request.name], request.arg);
+  		this.logger?.logOutgoing(msgLength, request.id, RequestInitiator.LocalSide, `${requestTypeToStr(request.type)}: ${request.channelName}.${request.name}`, request.arg);
+  		return;
+  	}
+  
+  	case RequestType.PromiseCancel:
+  	case RequestType.EventDispose: {
+  		const msgLength = this.send([request.type, request.id]);
+  		this.logger?.logOutgoing(msgLength, request.id, RequestInitiator.LocalSide, requestTypeToStr(request.type));
+  		return;
+  	}
+  }
+  }
+  
+  private send(header: any, body: any = undefined): number {
+  const writer = new BufferWriter();
+  serialize(writer, header);
+  serialize(writer, body);
+  return this.sendBuffer(writer.buffer);
+  }
+  
+  private sendBuffer(message: VSBuffer): number {
+  try {
+  	this.protocol.send(message);
+  	return message.byteLength;
+  } catch (err) {
+  	// noop
+  	return 0;
+  }
+  }
+  
+  private onBuffer(message: VSBuffer): void {
+  const reader = new BufferReader(message);
+  const header = deserialize(reader);
+  const body = deserialize(reader);
+  const type: ResponseType = header[0];
+  
+  switch (type) {
+  	case ResponseType.Initialize:
+  		this.logger?.logIncoming(message.byteLength, 0, RequestInitiator.LocalSide, responseTypeToStr(type));
+  		return this.onResponse({ type: header[0] });
+  
+  	case ResponseType.PromiseSuccess:
+  	case ResponseType.PromiseError:
+  	case ResponseType.EventFire:
+  	case ResponseType.PromiseErrorObj:
+  		this.logger?.logIncoming(message.byteLength, header[1], RequestInitiator.LocalSide, responseTypeToStr(type), body);
+  		return this.onResponse({ type: header[0], id: header[1], data: body });
+  }
+  }
+  
+  private onResponse(response: IRawResponse): void {
+  if (response.type === ResponseType.Initialize) {
+  	this.state = State.Idle;
+  	this._onDidInitialize.fire();
+  	return;
+  }
+  
+  const handler = this.handlers.get(response.id);
+  
+  handler?.(response);
+  }
+  
+  @memoize
+  get onDidInitializePromise(): Promise<void> {
+  return Event.toPromise(this.onDidInitialize);
+  }
+  
+  private whenInitialized(): Promise<void> {
+  if (this.state === State.Idle) {
+  	return Promise.resolve();
+  } else {
+  	return this.onDidInitializePromise;
+  }
+  }
+  
+  dispose(): void {
+  this.isDisposed = true;
+  if (this.protocolListener) {
+  	this.protocolListener.dispose();
+  	this.protocolListener = null;
+  }
+  dispose(this.activeRequests.values());
+  this.activeRequests.clear();
+  }
+  }
+  ```
+	- 上述是一个比较通用的ChannelClient的实现。可以看到ChannelClient实现了IChannelClient接口，也就是实现了getChannel这个方法。可以看出来，getChannel是一个闭包的方法，是将ChannelClient内的方法暴露给外界使用，并且内存中只有一个Client对象，并且ChannelClient可以根据传入的不同IChannel，调用不同的请求方式。
+	- 在构造函数中，也可以看到，这个Client对信道进行了onMessage的监听。
+	- 在这个实现中，有一个handlers的Map对象。这个对象用于在发送请求时，存储一个响应返回后的Handler，用于处理响应。
+- 其次看ChannelServer的源码：
+  
+  ```
+  export class ChannelServer<TContext = string> implements IChannelServer<TContext>, IDisposable {
+  
+  private channels = new Map<string, IServerChannel<TContext>>();
+  private activeRequests = new Map<number, IDisposable>();
+  private protocolListener: IDisposable | null;
+  
+  // Requests might come in for channels which are not yet registered.
+  // They will timeout after `timeoutDelay`.
+  private pendingRequests = new Map<string, PendingRequest[]>();
+  
+  constructor(private protocol: IMessagePassingProtocol, private ctx: TContext, private logger: IIPCLogger | null = null, private timeoutDelay: number = 1000) {
+  this.protocolListener = this.protocol.onMessage(msg => this.onRawMessage(msg));
+  this.sendResponse({ type: ResponseType.Initialize });
+  }
+  
+  registerChannel(channelName: string, channel: IServerChannel<TContext>): void {
+  this.channels.set(channelName, channel);
+  
+  // https://github.com/microsoft/vscode/issues/72531
+  setTimeout(() => this.flushPendingRequests(channelName), 0);
+  }
+  
+  private sendResponse(response: IRawResponse): void {
+  switch (response.type) {
+  	case ResponseType.Initialize: {
+  		const msgLength = this.send([response.type]);
+  		this.logger?.logOutgoing(msgLength, 0, RequestInitiator.OtherSide, responseTypeToStr(response.type));
+  		return;
+  	}
+  
+  	case ResponseType.PromiseSuccess:
+  	case ResponseType.PromiseError:
+  	case ResponseType.EventFire:
+  	case ResponseType.PromiseErrorObj: {
+  		const msgLength = this.send([response.type, response.id], response.data);
+  		this.logger?.logOutgoing(msgLength, response.id, RequestInitiator.OtherSide, responseTypeToStr(response.type), response.data);
+  		return;
+  	}
+  }
+  }
+  
+  private send(header: any, body: any = undefined): number {
+  const writer = new BufferWriter();
+  serialize(writer, header);
+  serialize(writer, body);
+  return this.sendBuffer(writer.buffer);
+  }
+  
+  private sendBuffer(message: VSBuffer): number {
+  try {
+  	this.protocol.send(message);
+  	return message.byteLength;
+  } catch (err) {
+  	// noop
+  	return 0;
+  }
+  }
+  
+  private onRawMessage(message: VSBuffer): void {
+  const reader = new BufferReader(message);
+  const header = deserialize(reader);
+  const body = deserialize(reader);
+  const type = header[0] as RequestType;
+  
+  switch (type) {
+  	case RequestType.Promise:
+  		this.logger?.logIncoming(message.byteLength, header[1], RequestInitiator.OtherSide, `${requestTypeToStr(type)}: ${header[2]}.${header[3]}`, body);
+  		return this.onPromise({ type, id: header[1], channelName: header[2], name: header[3], arg: body });
+  	case RequestType.EventListen:
+  		this.logger?.logIncoming(message.byteLength, header[1], RequestInitiator.OtherSide, `${requestTypeToStr(type)}: ${header[2]}.${header[3]}`, body);
+  		return this.onEventListen({ type, id: header[1], channelName: header[2], name: header[3], arg: body });
+  	case RequestType.PromiseCancel:
+  		this.logger?.logIncoming(message.byteLength, header[1], RequestInitiator.OtherSide, `${requestTypeToStr(type)}`);
+  		return this.disposeActiveRequest({ type, id: header[1] });
+  	case RequestType.EventDispose:
+  		this.logger?.logIncoming(message.byteLength, header[1], RequestInitiator.OtherSide, `${requestTypeToStr(type)}`);
+  		return this.disposeActiveRequest({ type, id: header[1] });
+  }
+  }
+  
+  private onPromise(request: IRawPromiseRequest): void {
+  const channel = this.channels.get(request.channelName);
+  
+  if (!channel) {
+  	this.collectPendingRequest(request);
+  	return;
+  }
+  
+  const cancellationTokenSource = new CancellationTokenSource();
+  let promise: Promise<any>;
+  
+  try {
+  	promise = channel.call(this.ctx, request.name, request.arg, cancellationTokenSource.token);
+  } catch (err) {
+  	promise = Promise.reject(err);
+  }
+  
+  const id = request.id;
+  
+  promise.then(data => {
+  	this.sendResponse(<IRawResponse>{ id, data, type: ResponseType.PromiseSuccess });
+  }, err => {
+  	if (err instanceof Error) {
+  		this.sendResponse(<IRawResponse>{
+  			id, data: {
+  				message: err.message,
+  				name: err.name,
+  				stack: err.stack ? (err.stack.split ? err.stack.split('\n') : err.stack) : undefined
+  			}, type: ResponseType.PromiseError
+  		});
+  	} else {
+  		this.sendResponse(<IRawResponse>{ id, data: err, type: ResponseType.PromiseErrorObj });
+  	}
+  }).finally(() => {
+  	disposable.dispose();
+  	this.activeRequests.delete(request.id);
+  });
+  
+  const disposable = toDisposable(() => cancellationTokenSource.cancel());
+  this.activeRequests.set(request.id, disposable);
+  }
+  
+  private onEventListen(request: IRawEventListenRequest): void {
+  const channel = this.channels.get(request.channelName);
+  
+  if (!channel) {
+  	this.collectPendingRequest(request);
+  	return;
+  }
+  
+  const id = request.id;
+  const event = channel.listen(this.ctx, request.name, request.arg);
+  const disposable = event(data => this.sendResponse(<IRawResponse>{ id, data, type: ResponseType.EventFire }));
+  
+  this.activeRequests.set(request.id, disposable);
+  }
+  
+  private disposeActiveRequest(request: IRawRequest): void {
+  const disposable = this.activeRequests.get(request.id);
+  
+  if (disposable) {
+  	disposable.dispose();
+  	this.activeRequests.delete(request.id);
+  }
+  }
+  
+  private collectPendingRequest(request: IRawPromiseRequest | IRawEventListenRequest): void {
+  let pendingRequests = this.pendingRequests.get(request.channelName);
+  
+  if (!pendingRequests) {
+  	pendingRequests = [];
+  	this.pendingRequests.set(request.channelName, pendingRequests);
+  }
+  
+  const timer = setTimeout(() => {
+  	console.error(`Unknown channel: ${request.channelName}`);
+  
+  	if (request.type === RequestType.Promise) {
+  		this.sendResponse(<IRawResponse>{
+  			id: request.id,
+  			data: { name: 'Unknown channel', message: `Channel name '${request.channelName}' timed out after ${this.timeoutDelay}ms`, stack: undefined },
+  			type: ResponseType.PromiseError
+  		});
+  	}
+  }, this.timeoutDelay);
+  
+  pendingRequests.push({ request, timeoutTimer: timer });
+  }
+  
+  private flushPendingRequests(channelName: string): void {
+  const requests = this.pendingRequests.get(channelName);
+  
+  if (requests) {
+  	for (const request of requests) {
+  		clearTimeout(request.timeoutTimer);
+  
+  		switch (request.request.type) {
+  			case RequestType.Promise: this.onPromise(request.request); break;
+  			case RequestType.EventListen: this.onEventListen(request.request); break;
+  		}
+  	}
+  
+  	this.pendingRequests.delete(channelName);
+  }
+  }
+  
+  public dispose(): void {
+  if (this.protocolListener) {
+  	this.protocolListener.dispose();
+  	this.protocolListener = null;
+  }
+  dispose(this.activeRequests.values());
+  this.activeRequests.clear();
+  }
+  }
+  ```
+	- 上述也是一个比较通用的ChannelServer的实现。可以看到了ChannelServer实现了IChannelServer接口，也就是实现了registerChannel这个方法。这个方法比较简单，也就是向ChannelServer内的channels Map注册对应的ServerChannel，也就是处理频道。对过来的消息，也会根据不同的标识进行处理。
+	- 在构造函数中，也可以看到和Client一样的行为，那就是对信道进行onMessage的监听。
+	- 除此之外，还需要向Client发送一个初始化信息。
+- ### 5.5.4.  一对一通信和一对多通信
+- 在上述描述的基础上，我们可以看到了一个比较完整的单向通信方式，也就是Caller-Service机制。那么如何实现一对一的双向通信呢？
+- 很简单，让一个对象同时具有ChannelServer和ChannelClient就可以了。
+- 这时候就会有一个新的概念，那就是IPCClient（IPC Client）。这里和网上有一些资料描述的不一样，那就是一对IPC Client就可以具有一对一的通信，而不是非要一个Client对应一个Server。后者的说法很容易造成误解。
+  
+  ![](../../assets/VSCode解析/015_1709351503663-b4a1979e-7dd3-414c-b301-32b9c3924b07.png)
+- IPC Client的源码也很简单，就是包裹了一个ChannelServer和一个ChannelClient。
+  
+  ```
+  export class IPCClient<TContext = string> implements IChannelClient, IChannelServer<TContext>, IDisposable {
+  
+  private channelClient: ChannelClient;
+  private channelServer: ChannelServer<TContext>;
+  
+  constructor(protocol: IMessagePassingProtocol, ctx: TContext, ipcLogger: IIPCLogger | null = null) {
+  const writer = new BufferWriter();
+  serialize(writer, ctx);
+  protocol.send(writer.buffer);
+  
+  this.channelClient = new ChannelClient(protocol, ipcLogger);
+  this.channelServer = new ChannelServer(protocol, ctx, ipcLogger);
+  }
+  
+  getChannel<T extends IChannel>(channelName: string): T {
+  return this.channelClient.getChannel(channelName) as T;
+  }
+  
+  registerChannel(channelName: string, channel: IServerChannel<TContext>): void {
+  this.channelServer.registerChannel(channelName, channel);
+  }
+  
+  dispose(): void {
+  this.channelClient.dispose();
+  this.channelServer.dispose();
+  }
+  }
+  ```
+- 那么此时问题又来了，在Electron框架下，主进程只有一个，而且VSCode还构建了全局唯一的一个共享进程，这就需要一个一对多的通信。这里就需要引入两个概念，一个Connection，另外一个IPCServer（IPC Server）。主进程和共享进程可能会同时服务多个渲染进程，此时就需要一个对象在主进程端，对不同的渲染进程连接的IPC Client进行管理。
+- Connection本质上就是一个IPCClient和一个唯一标识ctx组成的，可以看成是一个IPCClient。而IPCServer就是对多个Connection进行管理和通信的对象。
+- 先看一下Connection的源码：
+- ```
+  export class IPCServer<TContext = string> implements IChannelServer<TContext>, IRoutingChannelClient<TContext>, IConnectionHub<TContext>, IDisposable {
+  
+  	private channels = new Map<string, IServerChannel<TContext>>();
+  	private _connections = new Set<Connection<TContext>>();
+  
+  	private readonly _onDidAddConnection = new Emitter<Connection<TContext>>();
+  	readonly onDidAddConnection: Event<Connection<TContext>> = this._onDidAddConnection.event;
+  
+  	private readonly _onDidRemoveConnection = new Emitter<Connection<TContext>>();
+  	readonly onDidRemoveConnection: Event<Connection<TContext>> = this._onDidRemoveConnection.event;
+  
+  	private readonly disposables = new DisposableStore();
+  
+  	get connections(): Connection<TContext>[] {
+  		const result: Connection<TContext>[] = [];
+  		this._connections.forEach(ctx => result.push(ctx));
+  		return result;
+  	}
+  
+  	constructor(onDidClientConnect: Event<ClientConnectionEvent>) {
+  		// 当客户端连接时触发。在连接发生时，会执行提供的回调函数。
+  		this.disposables.add(onDidClientConnect(({ protocol, onDidClientDisconnect }) => {
+  			const onFirstMessage = Event.once(protocol.onMessage);
+  
+  			this.disposables.add(onFirstMessage(msg => {
+  				const reader = new BufferReader(msg);
+  				const ctx = deserialize(reader) as TContext;
+  
+  				const channelServer = new ChannelServer(protocol, ctx);
+  				const channelClient = new ChannelClient(protocol);
+  
+  				this.channels.forEach((channel, name) => channelServer.registerChannel(name, channel));
+  
+  				const connection: Connection<TContext> = { channelServer, channelClient, ctx };
+  				this._connections.add(connection);
+  				this._onDidAddConnection.fire(connection);
+  
+  				this.disposables.add(onDidClientDisconnect(() => {
+  					channelServer.dispose();
+  					channelClient.dispose();
+  					this._connections.delete(connection);
+  					this._onDidRemoveConnection.fire(connection);
+  				}));
+  			}));
+  		}));
+  	}
+  
+  	/**
+  	 * Get a channel from a remote client. When passed a router,
+  	 * one can specify which client it wants to call and listen to/from.
+  	 * Otherwise, when calling without a router, a random client will
+  	 * be selected and when listening without a router, every client
+  	 * will be listened to.
+  	 */
+  	getChannel<T extends IChannel>(channelName: string, router: IClientRouter<TContext>): T;
+  	getChannel<T extends IChannel>(channelName: string, clientFilter: (client: Client<TContext>) => boolean): T;
+  	getChannel<T extends IChannel>(channelName: string, routerOrClientFilter: IClientRouter<TContext> | ((client: Client<TContext>) => boolean)): T {
+  		const that = this;
+  
+  		return {
+  			call(command: string, arg?: any, cancellationToken?: CancellationToken): Promise<T> {
+  				let connectionPromise: Promise<Client<TContext>>;
+  
+  				if (isFunction(routerOrClientFilter)) {
+  					// when no router is provided, we go random client picking
+  					const connection = getRandomElement(that.connections.filter(routerOrClientFilter));
+  
+  					connectionPromise = connection
+  						// if we found a client, let's call on it
+  						? Promise.resolve(connection)
+  						// else, let's wait for a client to come along
+  						: Event.toPromise(Event.filter(that.onDidAddConnection, routerOrClientFilter));
+  				} else {
+  					connectionPromise = routerOrClientFilter.routeCall(that, command, arg);
+  				}
+  
+  				const channelPromise = connectionPromise
+  					.then(connection => (connection as Connection<TContext>).channelClient.getChannel(channelName));
+  
+  				return getDelayedChannel(channelPromise)
+  					.call(command, arg, cancellationToken);
+  			},
+  			listen(event: string, arg: any): Event<T> {
+  				if (isFunction(routerOrClientFilter)) {
+  					return that.getMulticastEvent(channelName, routerOrClientFilter, event, arg);
+  				}
+  
+  				const channelPromise = routerOrClientFilter.routeEvent(that, event, arg)
+  					.then(connection => (connection as Connection<TContext>).channelClient.getChannel(channelName));
+  
+  				return getDelayedChannel(channelPromise)
+  					.listen(event, arg);
+  			}
+  		} as T;
+  	}
+  
+  	private getMulticastEvent<T extends IChannel>(channelName: string, clientFilter: (client: Client<TContext>) => boolean, eventName: string, arg: any): Event<T> {
+  		const that = this;
+  		let disposables: DisposableStore | undefined;
+  
+  		// Create an emitter which hooks up to all clients
+  		// as soon as first listener is added. It also
+  		// disconnects from all clients as soon as the last listener
+  		// is removed.
+  		const emitter = new Emitter<T>({
+  			onWillAddFirstListener: () => {
+  				disposables = new DisposableStore();
+  
+  				// The event multiplexer is useful since the active
+  				// client list is dynamic. We need to hook up and disconnection
+  				// to/from clients as they come and go.
+  				const eventMultiplexer = new EventMultiplexer<T>();
+  				const map = new Map<Connection<TContext>, IDisposable>();
+  
+  				const onDidAddConnection = (connection: Connection<TContext>) => {
+  					const channel = connection.channelClient.getChannel(channelName);
+  					const event = channel.listen<T>(eventName, arg);
+  					const disposable = eventMultiplexer.add(event);
+  
+  					map.set(connection, disposable);
+  				};
+  
+  				const onDidRemoveConnection = (connection: Connection<TContext>) => {
+  					const disposable = map.get(connection);
+  
+  					if (!disposable) {
+  						return;
+  					}
+  
+  					disposable.dispose();
+  					map.delete(connection);
+  				};
+  
+  				that.connections.filter(clientFilter).forEach(onDidAddConnection);
+  				Event.filter(that.onDidAddConnection, clientFilter)(onDidAddConnection, undefined, disposables);
+  				that.onDidRemoveConnection(onDidRemoveConnection, undefined, disposables);
+  				eventMultiplexer.event(emitter.fire, emitter, disposables);
+  
+  				disposables.add(eventMultiplexer);
+  			},
+  			onDidRemoveLastListener: () => {
+  				disposables?.dispose();
+  				disposables = undefined;
+  			}
+  		});
+  
+  		return emitter.event;
+  	}
+  
+  	registerChannel(channelName: string, channel: IServerChannel<TContext>): void {
+  		this.channels.set(channelName, channel);
+  
+  		for (const connection of this._connections) {
+  			connection.channelServer.registerChannel(channelName, channel);
+  		}
+  	}
+  
+  	dispose(): void {
+  		this.disposables.dispose();
+  
+  		for (const connection of this._connections) {
+  			connection.channelClient.dispose();
+  			connection.channelServer.dispose();
+  		}
+  
+  		this._connections.clear();
+  		this.channels.clear();
+  		this._onDidAddConnection.dispose();
+  		this._onDidRemoveConnection.dispose();
+  	}
+  }
+  ```
+	- 可以看到源码中IPCServer不仅对Connection进行了管理，还有单个IPC Client的功能，具体原因是因为主进程还需要跟共享进程进行通信，所以这里也有一部分点对点的通信，因此IPC Server不仅有管理IPCClient的功能，还有单个IPCClient的具体功能。
+- ### 5.5.5.  VSCode进程通信构建流程
+- 主进程启动，构建一个IPCServer，
+- 主进程-共享进程
+	- 主进程 fork 共享进程，两者构建基于Electron IPC的通信，主进程侧通过闭包的形式将连接共享进程的方式暴露。
+	- 共享进程创建一个IPC Server，用于管理渲染进程Client
+- 主进程 - 渲染进程
+	- 主进程 fork 渲染进程，两者构建Electron IPC通信，同时构建渲染进程侧的IPCClient。主进程的IPCServer将其纳入管理。
+	- 渲染进程生成RequestChannel和ResponseChannel，向主进程请求连接共享进程。
+	- 主进程在收到请求之后，通过上述提及的通信桥通信机制，构建渲染进程和共享进程的通信。
+	- 共享进程将上述构建的通信通道纳入到Client管理中。
+	- 渲染进程生成ResponseChannel，向主进程请求创建不同的工具进程。
+	- 主进程在收到请求之后，通过上述提及的通信桥通信机制，fork新的子进程，并将通信通道所有权移交给渲染进程。
+- 综上所属：IPCServer只存在于主进程和共享进程中，渲染进程中没有IPCServer，其与不同工具进程间的通信都是一对一式的，并且包装成了不同的Service提供服务。
+- ### 5.5.6.  资料总结
+- [https://zhuanlan.zhihu.com/p/360106947](https://zhuanlan.zhihu.com/p/360106947)
+- ## 5.6.  Remote SSH解析
+- ### 5.6.1.  Remote SSH远程建链流程
+- 1. 通过SSH远程到服务器上下载Code-Server
+	- 根据host、port、username、password或者可信的public-key通过ssh远程到服务器下载code-server
+	- 解压、启动
+- ```
+  # Server installation script
+  
+  TMP_DIR="\${XDG_RUNTIME_DIR:-"/tmp"}"
+  
+  DISTRO_VERSION="${version}"
+  DISTRO_COMMIT="${commit}"
+  DISTRO_QUALITY="${quality}"
+  DISTRO_VSCODIUM_RELEASE="${release ?? ''}"
+  
+  SERVER_APP_NAME="${serverApplicationName}"
+  SERVER_INITIAL_EXTENSIONS="${extensions}"
+  SERVER_LISTEN_FLAG="${useSocketPath ? `--socket-path="$TMP_DIR/vscode-server-sock-${crypto.randomUUID()}"` : '--port=0'}"
+  SERVER_DATA_DIR="$HOME/${serverDataFolderName}"
+  SERVER_DIR="$SERVER_DATA_DIR/bin/$DISTRO_COMMIT"
+  SERVER_SCRIPT="$SERVER_DIR/bin/$SERVER_APP_NAME"
+  SERVER_LOGFILE="$SERVER_DATA_DIR/.$DISTRO_COMMIT.log"
+  SERVER_PIDFILE="$SERVER_DATA_DIR/.$DISTRO_COMMIT.pid"
+  SERVER_TOKENFILE="$SERVER_DATA_DIR/.$DISTRO_COMMIT.token"
+  SERVER_ARCH=
+  SERVER_CONNECTION_TOKEN=
+  SERVER_DOWNLOAD_URL=
+  
+  LISTENING_ON=
+  OS_RELEASE_ID=
+  ARCH=
+  PLATFORM=
+  
+  # Mimic output from logs of remote-ssh extension
+  print_install_results_and_exit() {
+      echo "${id}: start"
+      echo "exitCode==$1=="
+      echo "listeningOn==$LISTENING_ON=="
+      echo "connectionToken==$SERVER_CONNECTION_TOKEN=="
+      echo "logFile==$SERVER_LOGFILE=="
+      echo "osReleaseId==$OS_RELEASE_ID=="
+      echo "arch==$ARCH=="
+      echo "platform==$PLATFORM=="
+      echo "tmpDir==$TMP_DIR=="
+      ${envVariables.map(envVar => `echo "${envVar}==$${envVar}=="`).join('\n')}
+      echo "${id}: end"
+      exit 0
+  }
+  
+  # Check if platform is supported
+  KERNEL="$(uname -s)"
+  case $KERNEL in
+      Darwin)
+          PLATFORM="darwin"
+          ;;
+      Linux)
+          PLATFORM="linux"
+          ;;
+      FreeBSD)
+          PLATFORM="freebsd"
+          ;;
+      DragonFly)
+          PLATFORM="dragonfly"
+          ;;
+      *)
+          echo "Error platform not supported: $KERNEL"
+          print_install_results_and_exit 1
+          ;;
+  esac
+  
+  # Check machine architecture
+  ARCH="$(uname -m)"
+  case $ARCH in
+      x86_64 | amd64)
+          SERVER_ARCH="x64"
+          ;;
+      armv7l | armv8l)
+          SERVER_ARCH="armhf"
+          ;;
+      arm64 | aarch64)
+          SERVER_ARCH="arm64"
+          ;;
+      ppc64le)
+          SERVER_ARCH="ppc64le"
+          ;;
+      *)
+          echo "Error architecture not supported: $ARCH"
+          print_install_results_and_exit 1
+          ;;
+  esac
+  
+  # https://www.freedesktop.org/software/systemd/man/os-release.html
+  OS_RELEASE_ID="$(grep -i '^ID=' /etc/os-release 2>/dev/null | sed 's/^ID=//gi' | sed 's/"//g')"
+  if [[ -z $OS_RELEASE_ID ]]; then
+      OS_RELEASE_ID="$(grep -i '^ID=' /usr/lib/os-release 2>/dev/null | sed 's/^ID=//gi' | sed 's/"//g')"
+      if [[ -z $OS_RELEASE_ID ]]; then
+          OS_RELEASE_ID="unknown"
+      fi
+  fi
+  
+  # Create installation folder
+  if [[ ! -d $SERVER_DIR ]]; then
+      mkdir -p $SERVER_DIR
+      if (( $? > 0 )); then
+          echo "Error creating server install directory"
+          print_install_results_and_exit 1
+      fi
+  fi
+  
+  SERVER_DOWNLOAD_URL="$(echo "${serverDownloadUrlTemplate.replace(/\$\{/g, '\\${')}" | sed "s/\\\${quality}/$DISTRO_QUALITY/g" | sed "s/\\\${version}/$DISTRO_VERSION/g" | sed "s/\\\${commit}/$DISTRO_COMMIT/g" | sed "s/\\\${os}/$PLATFORM/g" | sed "s/\\\${arch}/$SERVER_ARCH/g" | sed "s/\\\${release}/$DISTRO_VSCODIUM_RELEASE/g")"
+  
+  # Check if server script is already installed
+  if [[ ! -f $SERVER_SCRIPT ]]; then
+      if [[ "$PLATFORM" != "darwin" ]] && [[ "$PLATFORM" != "linux" ]]; then
+          echo "Error "$PLATFORM" needs manual installation of remote extension host"
+          print_install_results_and_exit 1
+      fi
+  
+      pushd $SERVER_DIR > /dev/null
+  
+      if [[ ! -z $(which wget) ]]; then
+          wget --tries=3 --timeout=10 --continue --no-verbose -O vscode-server.tar.gz $SERVER_DOWNLOAD_URL
+      elif [[ ! -z $(which curl) ]]; then
+          curl --retry 3 --connect-timeout 10 --location --show-error --silent --output vscode-server.tar.gz $SERVER_DOWNLOAD_URL
+      else
+          echo "Error no tool to download server binary"
+          print_install_results_and_exit 1
+      fi
+  
+      if (( $? > 0 )); then
+          echo "Error downloading server from $SERVER_DOWNLOAD_URL"
+          print_install_results_and_exit 1
+      fi
+  
+      tar -xf vscode-server.tar.gz --strip-components 1
+      if (( $? > 0 )); then
+          echo "Error while extracting server contents"
+          print_install_results_and_exit 1
+      fi
+  
+      if [[ ! -f $SERVER_SCRIPT ]]; then
+          echo "Error server contents are corrupted"
+          print_install_results_and_exit 1
+      fi
+  
+      rm -f vscode-server.tar.gz
+  
+      popd > /dev/null
+  else
+      echo "Server script already installed in $SERVER_SCRIPT"
+  fi
+  
+  # Try to find if server is already running
+  if [[ -f $SERVER_PIDFILE ]]; then
+      SERVER_PID="$(cat $SERVER_PIDFILE)"
+      SERVER_RUNNING_PROCESS="$(ps -o pid,args -p $SERVER_PID | grep $SERVER_SCRIPT)"
+  else
+      SERVER_RUNNING_PROCESS="$(ps -o pid,args -A | grep $SERVER_SCRIPT | grep -v grep)"
+  fi
+  
+  if [[ -z $SERVER_RUNNING_PROCESS ]]; then
+      if [[ -f $SERVER_LOGFILE ]]; then
+          rm $SERVER_LOGFILE
+      fi
+      if [[ -f $SERVER_TOKENFILE ]]; then
+          rm $SERVER_TOKENFILE
+      fi
+  
+      touch $SERVER_TOKENFILE
+      chmod 600 $SERVER_TOKENFILE
+      SERVER_CONNECTION_TOKEN="${crypto.randomUUID()}"
+      echo $SERVER_CONNECTION_TOKEN > $SERVER_TOKENFILE
+  
+      $SERVER_SCRIPT --start-server --host=127.0.0.1 $SERVER_LISTEN_FLAG $SERVER_INITIAL_EXTENSIONS --connection-token-file $SERVER_TOKENFILE --telemetry-level off --enable-remote-auto-shutdown --accept-server-license-terms &> $SERVER_LOGFILE &
+      echo $! > $SERVER_PIDFILE
+  else
+      echo "Server script is already running $SERVER_SCRIPT"
+  fi
+  
+  if [[ -f $SERVER_TOKENFILE ]]; then
+      SERVER_CONNECTION_TOKEN="$(cat $SERVER_TOKENFILE)"
+  else
+      echo "Error server token file not found $SERVER_TOKENFILE"
+      print_install_results_and_exit 1
+  fi
+  
+  if [[ -f $SERVER_LOGFILE ]]; then
+      for i in {1..5}; do
+          LISTENING_ON="$(cat $SERVER_LOGFILE | grep -E 'Extension host agent listening on .+' | sed 's/Extension host agent listening on //')"
+          if [[ -n $LISTENING_ON ]]; then
+              break
+          fi
+          sleep 0.5
+      done
+  
+      if [[ -z $LISTENING_ON ]]; then
+          echo "Error server did not start sucessfully"
+          print_install_results_and_exit 1
+      fi
+  else
+      echo "Error server log file not found $SERVER_LOGFILE"
+      print_install_results_and_exit 1
+  fi
+  
+  # Finish server setup
+  print_install_results_and_exit 0
+  ```
+- 2. 根据上述启动的code-server解析出来在linux服务器上生成的socket设备文件，其实也可以通过端口的方式进行链接。
+	- socket设备文件是通过ssh隧道执行命令之后，从返回中提取出来的。
+	- 这个设备文件是后续用来链接到本地local的。
+- 3. 在本地寻找一个合适的端口，或者也生成一个socket文件，用于本地与远程进行链接的。
+- 4. 最后通过ssh技术，实现了local port->socket port->remote port的串联链接，至此为止，基本的链接已经建立完成。
+- ### 5.6.2.  OpenSSH 插件源码
+  
+  [https://github.com/jeanp413/open-remote-ssh](https://github.com/jeanp413/open-remote-ssh)
+- # 6.  VSCode架构分析
+- VSCode源码地址：[https://github.com/microsoft/vscode](https://github.com/microsoft/vscode)
+- VSCode文档地址：[https://code.visualstudio.com/docs](https://code.visualstudio.com/docs)
+- ## 6.1.  VSCode界面设计
+- ![](../../assets/VSCode解析/016_1695539033527-fb1e9e29-faec-4b7f-8751-cd13a90c2f2f.png)
+- ## 6.2.  VSCode软件产品形态
+- VSCode一共有三种形态：
+	- 客户端形态：windows、linux、macos三种主流操作系统的客户端
+	- server形态：用于构建vscode的网页版，另外ssh版本也需要在远端建立起一个server版的vscode
+	- cli形态：命令行形态
+- 下图就是官方提供了一个关于SSH如何链接到远端进行远程开发的示意图。
+- 这也就是实现了渲染和工作空间分离的好处。也可以看出来VSCode这个产品设计的精巧之处。
+  
+  ![](../../assets/VSCode解析/017_1719071869495-d0ec4a87-d3ff-4455-8045-1b8072c8a074.png)
+- ## 6.3.  启动流程（TLDR）
+- ### 6.3.1.  客户端形态
+- VSCode是基于typescript语言开发的。因此，在桌面的状态下，启动会通过node out/main.js来启动整个VSCode的应用程序。而通过对源码中的tsconfig.json来看，out/main.js这个文件是由src/main.js而来的。因此可以去看这个文件。
+- 在这个文件中，可以看到这样一段代码
+- ```
+  // Load our code once ready
+  app.once('ready', function () {
+    if (args['trace']) {
+      const contentTracing = require('electron').contentTracing;
+  
+      const traceOptions = {
+        categoryFilter: args['trace-category-filter'] || '*',
+        traceOptions: args['trace-options'] || 'record-until-full,enable-sampling'
+      };
+  
+      contentTracing.startRecording(traceOptions).finally(() => onReady());
+    } else {
+      onReady();
+    }
+  });
+  
+  /**
+   * Main startup routine
+   *
+   * @param {string | undefined} codeCachePath
+   * @param {NLSConfiguration} nlsConfig
+   */
+  function startup(codeCachePath, nlsConfig) {
+    nlsConfig._languagePackSupport = true;
+  
+    process.env['VSCODE_NLS_CONFIG'] = JSON.stringify(nlsConfig);
+    process.env['VSCODE_CODE_CACHE_PATH'] = codeCachePath || '';
+  
+    // Load main in AMD
+    perf.mark('code/willLoadMainBundle');
+    // 真正的启动就是在这里，可以看到是通过require的方式引入了amd机制加载依赖，然后启动vs/code/electron-main/main，也就是说vs/code/electron-main/main文件是整个vscode启动时的第一个源代码入口
+    require('./bootstrap-amd').load('vs/code/electron-main/main', () => {
+      perf.mark('code/didLoadMainBundle');
+    });
+  }
+  
+  async function onReady() {
+    perf.mark('code/mainAppReady');
+  
+    try {
+      const [, nlsConfig] = await Promise.all([mkdirpIgnoreError(codeCachePath), resolveNlsConfiguration()]);
+  
+      startup(codeCachePath, nlsConfig);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+  ```
+	- app是electron的api。app.once('ready',...)是指的，在应用程序ready时，就执行以下的方法函数。
+	- 而这个方法就是整个vscode应用程序的入口。可以看到，入口是通过amd引入bootstrap-amd这个模块去加载vs/code/electron-main/main文件来启动的。
+- 接下来解析vs/code/electron-main/main文件
+	- 整个文件只会执行最后两行，因为根据ts的语法，前面大部分都是在描述CodeMain这个类。
+	  
+	  ```
+	  // Main Startup
+	  const code = new CodeMain();
+	  code.main();
+	  ```
+	- 可以看到这个文件就执行了一个main函数。接下来看一下main函数里面。
+	  
+	  ```
+	  main(): void {
+	  try {
+	  this.startup();
+	  } catch (error) {
+	  console.error(error.message);
+	  app.exit(1);
+	  }
+	  }
+	  ```
+	- main函数也很简单，就是执行了一个startup方法，以及如果出错处理的方法。接下来看一下startup方法。
+	  
+	  ```
+	  private async startup(): Promise<void> {
+	  
+	  // Set the error handler early enough so that we are not getting the
+	  // default electron error dialog popping up
+	  setUnexpectedErrorHandler(err => console.error(err));
+	  
+	  // Create services
+	  const [instantiationService, instanceEnvironment, environmentMainService, configurationService, stateMainService, bufferLogService, productService, userDataProfilesMainService] = this.createServices();
+	  
+	  try {
+	  
+	  // Init services
+	  try {
+	  	await this.initServices(environmentMainService, userDataProfilesMainService, configurationService, stateMainService, productService);
+	  } catch (error) {
+	  
+	  	// Show a dialog for errors that can be resolved by the user
+	  	this.handleStartupDataDirError(environmentMainService, productService, error);
+	  
+	  	throw error;
+	  }
+	  
+	  // Startup
+	  await instantiationService.invokeFunction(async accessor => {
+	  	const logService = accessor.get(ILogService);
+	  	const lifecycleMainService = accessor.get(ILifecycleMainService);
+	  	const fileService = accessor.get(IFileService);
+	  	const loggerService = accessor.get(ILoggerService);
+	  
+	  	// Create the main IPC server by trying to be the server
+	  	// If this throws an error it means we are not the first
+	  	// instance of VS Code running and so we would quit.
+	  	const mainProcessNodeIpcServer = await this.claimInstance(logService, environmentMainService, lifecycleMainService, instantiationService, productService, true);
+	  
+	  	// Write a lockfile to indicate an instance is running
+	  	// (https://github.com/microsoft/vscode/issues/127861#issuecomment-877417451)
+	  	FSPromises.writeFile(environmentMainService.mainLockfile, String(process.pid)).catch(err => {
+	  		logService.warn(`app#startup(): Error writing main lockfile: ${err.stack}`);
+	  	});
+	  
+	  	// Delay creation of spdlog for perf reasons (https://github.com/microsoft/vscode/issues/72906)
+	  	bufferLogService.logger = loggerService.createLogger('main', { name: localize('mainLog', "Main") });
+	  
+	  	// Lifecycle
+	  	Event.once(lifecycleMainService.onWillShutdown)(evt => {
+	  		fileService.dispose();
+	  		configurationService.dispose();
+	  		evt.join('instanceLockfile', FSPromises.unlink(environmentMainService.mainLockfile).catch(() => { /* ignored */ }));
+	  	});
+	       // 启动vscode应用程序
+	  	return instantiationService.createInstance(CodeApplication, mainProcessNodeIpcServer, instanceEnvironment).startup();
+	  });
+	  } catch (error) {
+	  instantiationService.invokeFunction(this.quit, error);
+	  }
+	  }
+	  ```
+	- 可以看到startup方法就复杂了起来，里面大概可以分为这么几步：
+		- 1.  设置未处理错误的处理器
+		- 2.  初始化基本的Service，包含了之前提及的IoC服务、环境服务、配置服务等等
+		- 3.  初始化各类基本的Service
+		- 4. 在最后，启动CodeApplication这个类，并执行CodeApplication.startup这个方法。这里是vscode应用程序正式启动的起点。
+- 接下来，就看vs/code/electron-main/app这个文件，上面提及的CodeApplication.startup方法就在这里面
+  
+  ```
+  async startup(): Promise<void> {
+  this.logService.debug('Starting VS Code');
+  this.logService.debug(`from: ${this.environmentMainService.appRoot}`);
+  this.logService.debug('args:', this.environmentMainService.args);
+  
+  // Make sure we associate the program with the app user model id
+  // This will help Windows to associate the running program with
+  // any shortcut that is pinned to the taskbar and prevent showing
+  // two icons in the taskbar for the same app.
+  const win32AppUserModelId = this.productService.win32AppUserModelId;
+  if (isWindows && win32AppUserModelId) {
+  	app.setAppUserModelId(win32AppUserModelId);
+  }
+  
+  // Fix native tabs on macOS 10.13
+  // macOS enables a compatibility patch for any bundle ID beginning with
+  // "com.microsoft.", which breaks native tabs for VS Code when using this
+  // identifier (from the official build).
+  // Explicitly opt out of the patch here before creating any windows.
+  // See: https://github.com/microsoft/vscode/issues/35361#issuecomment-399794085
+  try {
+  	if (isMacintosh && this.configurationService.getValue('window.nativeTabs') === true && !systemPreferences.getUserDefault('NSUseImprovedLayoutPass', 'boolean')) {
+  		systemPreferences.setUserDefault('NSUseImprovedLayoutPass', 'boolean', true as any);
+  	}
+  } catch (error) {
+  	this.logService.error(error);
+  }
+  
+  // Main process server (electron IPC based)
+  const mainProcessElectronServer = new ElectronIPCServer();
+  this.lifecycleMainService.onWillShutdown(e => {
+  	if (e.reason === ShutdownReason.KILL) {
+  		// When we go down abnormally, make sure to free up
+  		// any IPC we accept from other windows to reduce
+  		// the chance of doing work after we go down. Kill
+  		// is special in that it does not orderly shutdown
+  		// windows.
+  		mainProcessElectronServer.dispose();
+  	}
+  });
+  
+  // Resolve unique machine ID
+  this.logService.trace('Resolving machine identifier...');
+  const [machineId, sqmId] = await Promise.all([
+  	resolveMachineId(this.stateService, this.logService),
+  	resolveSqmId(this.stateService, this.logService)
+  ]);
+  this.logService.trace(`Resolved machine identifier: ${machineId}`);
+  
+  // Shared process
+    // 共享进程启动
+  const { sharedProcessReady, sharedProcessClient } = this.setupSharedProcess(machineId, sqmId);
+  
+  // Services
+  const appInstantiationService = await this.initServices(machineId, sqmId, sharedProcessReady);
+  
+  // Auth Handler
+  this._register(appInstantiationService.createInstance(ProxyAuthHandler));
+  
+  // Transient profiles handler
+  this._register(appInstantiationService.createInstance(UserDataProfilesHandler));
+  
+  // Init Channels
+  appInstantiationService.invokeFunction(accessor => this.initChannels(accessor, mainProcessElectronServer, sharedProcessClient));
+  
+  // Setup Protocol URL Handlers
+  const initialProtocolUrls = await appInstantiationService.invokeFunction(accessor => this.setupProtocolUrlHandlers(accessor, mainProcessElectronServer));
+  
+  // Setup vscode-remote-resource protocol handler.
+  this.setupManagedRemoteResourceUrlHandler(mainProcessElectronServer);
+  
+  // Signal phase: ready - before opening first window
+  this.lifecycleMainService.phase = LifecycleMainPhase.Ready;
+  
+  // Open Windows
+    // 启动窗口
+  await appInstantiationService.invokeFunction(accessor => this.openFirstWindow(accessor, initialProtocolUrls));
+  
+  // Signal phase: after window open
+  this.lifecycleMainService.phase = LifecycleMainPhase.AfterWindowOpen;
+  
+  // Post Open Windows Tasks
+  this.afterWindowOpen();
+  
+  // Set lifecycle phase to `Eventually` after a short delay and when idle (min 2.5sec, max 5sec)
+  const eventuallyPhaseScheduler = this._register(new RunOnceScheduler(() => {
+  	this._register(runWhenGlobalIdle(() => this.lifecycleMainService.phase = LifecycleMainPhase.Eventually, 2500));
+  }, 2500));
+  eventuallyPhaseScheduler.schedule();
+  }
+  ```
+	- 这个函数里面就包含了启动vscode应用程序的主干流程。
+	- 其中，可以看到，vscode启动了一个shared process。后面就称之为共享进程。这个共享进程是全局唯一的，是作为主进程的辅助，为渲染进程提供一些共享的空间和服务。
+	- 在启动了共享进程之后，vscode后面又开始初始化渲染进程。这个渲染进程就是vscode的窗口。
+- 进入到openFirstWindow方法可以看到频繁使用了windowsMainService.open这个方法，这个方法就是打开窗口的方法。这个open方法是在src\vs\platform\windows\electron-main\windowsMainService.ts这个文件中实现的。在这个方法中翻找，可以找到这样的一行。
+  
+  ```
+  // Open based on config
+  const { windows: usedWindows, filesOpenedInWindow } = await this.doOpen(openConfig, workspacesToOpen, foldersToOpen, emptyWindowsWithBackupsToRestore, emptyToOpen, filesToOpen, foldersToAdd);
+  ```
+- 这句话的意思就是根据config来打开窗口。然后我们进入到doOpen这个方法中进行翻找。这方法里面就是打开窗口的实际操作方法。通过查看这个方法，我们可以找到一个方法openInBrowserWindow，这个方法是打开窗口基础的方法，我们可以进入到这个方法中看vscode窗口是怎么打开的。这个方法的结束又有一个doOpenInBrowserWindow方法，看来只有这个方法才是真正打开窗口的地方，之前都是在做准备工作。进入到doOpenInBrowserWindow这个方法中，看到最后。看到了以下的代码
+  
+  ```
+  // Load it
+  window.load(configuration);
+  ```
+- 上面这段代码就是打开窗口的最核心的方法。
+- 其实通过仔细阅读openInBrowserWindow这个方法，我们可以看到vscode窗口的创建分为两步。首先是在src\vs\platform\windows\electron-main\windowsMainService.ts中的第1473行上下，首先执行了一个创建空窗口的代码。在创建CodeWindow这个对象的过程中，会调用electron的创建窗口的函数。
+  
+  ```
+  // Create the window
+  	mark('code/willCreateCodeWindow');
+  	// 创建一个空的窗口
+  	const createdWindow = window = this.instantiationService.createInstance(CodeWindow, {
+  		state,
+  		extensionDevelopmentPath: configuration.extensionDevelopmentPath,
+  		isExtensionTestHost: !!configuration.extensionTestsPath
+  	});
+  	mark('code/didCreateCodeWindow');
+  ```
+- 然后再上述的load方法中对创建的新窗口内进行具体的元素填充。
+  
+  ```
+  load(configuration: INativeWindowConfiguration, options: ILoadOptions = Object.create(null)): void {
+  this.logService.trace(`window#load: attempt to load window (id: ${this._id})`);
+  
+  // Clear Document Edited if needed
+  if (this.isDocumentEdited()) {
+  	if (!options.isReload || !this.backupMainService.isHotExitEnabled()) {
+  		this.setDocumentEdited(false);
+  	}
+  }
+  
+  // Clear Title and Filename if needed
+  if (!options.isReload) {
+  	if (this.getRepresentedFilename()) {
+  		this.setRepresentedFilename('');
+  	}
+  
+  	this._win.setTitle(this.productService.nameLong);
+  }
+  
+  // Update configuration values based on our window context
+  // and set it into the config object URL for usage.
+  this.updateConfiguration(configuration, options);
+  
+  // If this is the first time the window is loaded, we associate the paths
+  // directly with the window because we assume the loading will just work
+  if (this.readyState === ReadyState.NONE) {
+  	this._config = configuration;
+  }
+  
+  // Otherwise, the window is currently showing a folder and if there is an
+  // unload handler preventing the load, we cannot just associate the paths
+  // because the loading might be vetoed. Instead we associate it later when
+  // the window load event has fired.
+  else {
+  	this.pendingLoadConfig = configuration;
+  }
+  
+  // Indicate we are navigting now
+  this.readyState = ReadyState.NAVIGATING;
+  
+  // Load URL
+  // 加载空窗口内的具体元素，即渲染
+  this._win.loadURL(FileAccess.asBrowserUri(`vs/code/electron-sandbox/workbench/workbench${this.environmentMainService.isBuilt ? '' : '-dev'}.html`).toString(true));
+  
+  // Remember that we did load
+  const wasLoaded = this.wasLoaded;
+  this.wasLoaded = true;
+  
+  // Make window visible if it did not open in N seconds because this indicates an error
+  // Only do this when running out of sources and not when running tests
+  if (!this.environmentMainService.isBuilt && !this.environmentMainService.extensionTestsLocationURI) {
+  	this._register(new RunOnceScheduler(() => {
+  		if (this._win && !this._win.isVisible() && !this._win.isMinimized()) {
+  			this._win.show();
+  			this.focus({ force: true });
+  			this._win.webContents.openDevTools();
+  		}
+  	}, 10000)).schedule();
+  }
+  
+  // Event
+  this._onWillLoad.fire({ workspace: configuration.workspace, reason: options.isReload ? LoadReason.RELOAD : wasLoaded ? LoadReason.LOAD : LoadReason.INITIAL });
+  }
+  ```
+- 在上述的load这个方法内，可以看到有一行，就是使用文件的服务，进行加载一个html。这个html就在vs/code/electron-sandbox/workbench文件夹下。看到这个html中，有一行：
+  
+  ```
+  <script src="workbench.js"></script>
+  ```
+- 看到这一行就意味这，在这个空窗口渲染的过程中，会去加载workbench.js文件。而这个文件就是渲染进程内主要执行的代码文件了。
+- 在workbench.js这个文件中，最最最重要的，就是提示我们，vscode的渲染进程使用bootstrap-window.js这个模块，加载了'vs/workbench/workbench.desktop.main','vs/nls!vs/workbench/workbench.desktop.main','vs/css!vs/workbench/workbench.desktop.main'这三个文件，其中workbench.desktop.main就是定义了这个窗口内各类元素行为的代码文件，其余两个是国际化和渲染相关的css文件。至此为止，vscode比较重要的加载顺序和大致框架就结束了，接下来就是各个进程加载的细节了。
+- ### 6.3.2.  Server和CLI形态
+- Server版、Server-CLI版以及CLI版都是没有界面的VSCode的形态。
+- 可以说，这几个形态都是为了VSCode实现多种情况下的开发而存在的。比如：Server版是为了SSH远程链接而诞生的。
+- 以Server版的启动流程为例：
+	- 可以看到Server版启动的第一个文件就是src\server-main.js文件。这个文件里面就执行一个函数，那就是main函数。
+	- 在这个函数当中可以看到一个和其他客户端不一样的地方：
+	  
+	  ```
+	  const server = http.createServer(async (req, res) => {
+	  if (firstRequest) {
+	  firstRequest = false;
+	  perf.mark('code/server/firstRequest');
+	  }
+	  const remoteExtensionHostAgentServer = await getRemoteExtensionHostAgentServer();
+	  return remoteExtensionHostAgentServer.handleRequest(req, res);
+	  });
+	  ```
+	- 那就是启动了一个Server。这个Server启动了之后，还定义了一个该Server如何处置request和response的方法函数。而getRemoteExtensionHostAgentServer方法就是具体启动的入口。
+	- 此外，这个Server还监听了其他的很多一些事件用于其他的用途。
+	- 其他的入口流程跟上面的客户端形态差不多。
+	- 特别提一下关于SSH如何使用的。我想应该是通过SSH链接到目标服务器了之后，下载Server，启动Server，然后使用Render Process去远程链接这个Server接口。可以说下图的进程架构图里面，Extension Host Process和File Watcher Process变成了远程的一个Server管理的进程了。
+- ## 6.4.  VSCode的进程架构
+- ### 6.4.1.  桌面版VSCode进程架构
+  
+  ![](../../assets/VSCode解析/018_1708783486463-ae551d0b-cc99-46f7-b21a-d5147c5ce1f0.png)
+- Main Process（主进程）：是VSCode的入口进程，负责窗口管理、进程间通信、自动更新等全局任务。是一个唯一的进程，即即使开启多个窗口都是只有一个VSCode主进程。
+- Shared Process（共享进程）：全局只有一个共享进程。为多个渲染进行提供一些共享的服务和数据。
+- Render Process（渲染进程）：负责一个窗口的渲染。一个窗口对应一个Render Process。一个Main Process与多个Render Process构成一个Electron应用程序的基本框架。
+- Extension Host Process（插件宿主进程/插件主机进程）：本质上是一个由主进程启动、渲染进程管理的插件管理器。该进程可以运行满足触发条件的插件进程。插件在启动过程中，插件被禁止直接访问UI。
+- Debugger Process（调试进程）：这是一个特殊化的插件
+- Search Process：搜索是一类计算密集型的任务，单开进程保证软件整体的体验和性能。
+- ### 6.4.2.  SSH Remote进程架构
+  
+  ![](../../assets/VSCode解析/019_1727941354106-fdded3ac-abd1-462e-904a-28c44bdac6aa.png)
+- SSH Remote是使用SSH协议构建的通信通道对远程服务器代码进行处理的一种形态，与之类似的还有Tunnel、Web形态，他们使用的通信协议不太一样而已。
+	- 这个形态下，需要区分Client端和Server端来进行解析。
+	- Client端，也就是Local端。在Local端，主要的进程就是主进程、Shared Process和Render Process，这几个进程都是上面描述的几个进程。
+	- 在Server端，也就是远程服务端，主要的进程架构就是VSCode Server版或者说Web版的主要进程架构模型。
+- Server端的进程主要分为Code-Server主进程、Extension Host进程、FileWatcher进程和Pty进程。
+- Server端的进程架构和桌面端的进程架构不太一样，只有一个Code-Server的进程。
+	- 在Code-Server进程里面，会有一个数据结构对来自Client端的网络Connection和Extension Host进程等进行一一对应的链接和管理。
+	- Extension Host进程这些都是由Code-Server进程创建出来的，也就是说Extension中的上下文是由Server端的Code-Server进程创建的，而不是Client端的主进程创建的。
+	- VSCode中的资源管理，包括文档读写、文件树的读写等功能都是在主进程和Render Process中实现的，是和Code-Server进行通信获取的，Extension Host则是和Render Process一一对应的。插件、终端等功能都是通过Extension Host进程来实现的。
+	- 多次使用同一个账户登录同一个服务器，只会创建同一个Code-Server进程，其他的Server端进程，会一一和Client的Render Process创建。
+- Server端也可以直接切换成Web版，也就是在Client端只保留一个Render Process，也就是浏览器的一个tab页面。
+- ## 6.5.  VSCode源代码结构
+- ### 6.5.1.  一级目录结构
+- build            编译构建脚本
+- extensions  VSCode内置插件
+- resources    平台相关静态资源，图标等
+- scripts         工具脚本，开发/测试
+- out              编译输出目录
+- src               源码目录
+- test             测试套件
+- gulpfile.js    gulp task
+- product.json  App meta 信息
+- ### 6.5.2.  源代码下主要的目录
+- src/vs：分层和模块化的 core
+	- base: 通用的公共方法
+	- code: VSCode应用主入口
+	- platform：可被依赖注入的各种基础服务
+	- editor: Monaco文本编辑器
+	- workbench：整体视图框架以及各种组件
+		- services：布局中所涉及的各种组件的实现
+		- contrib：是向外拓展功能性API的文件夹
+	- ~~languages: 历史版本中的语言插件目录，现在都迁移至/extentions~~
+- src/typings: 公共基础类型
+- ### 6.5.3.  Editor文件夹
+- vs/editor文件夹不能有任何对node和electon-browser的依赖
+- vs/editor/contrib编辑器内部的扩展文件夹，依赖browser，可打包进 VSCode或者独立编辑器
+- vs/editor/standalone 独立编辑器代码，任何代码不得依赖该目录
+- vs/workbench/contrib/codeEditor 打包进 VSCode的目录
+- ### 6.5.4.  Workbench工作台
+- VSCode工作台（vs/workbench）包含有很多特性以提供丰富的开发体验。比如全文搜索，git 和 debug。工作台核心不得直接依赖扩展包，VSCode使用一种内部机制将这些扩展注册到工作台。
+- 所有的工作台扩展（Contrib）都必须包含在vs/workbench/contrib，该目录有以下约定：
+	- vs/workbench/contrib目录下的代码不得依赖任何文件夹外部代码
+	- 每一个 Contrib如果要对外暴露，将API 在一个出口文件里面导出 (e.g. vs/workbench/contrib/search/common/search.ts)
+	- 一个 Contrib可以依赖其他 Contrib的API (e.g. the git contribution may depend on vs/workbench/contrib/search/common/search.ts)
+	- 一个 Contrib不得依赖其他 Contrib的非API内部文件
+	- 即使 Contrib可以调用另一个 Contrib的出口 API，也要审慎的考虑，应尽量避免两个 Contrib互相依赖
+- vscode界面组件的的源码位置在workbench/browser/parts下。每一个文件夹对应不同的组件
+- ### 6.5.5.  源代码文件夹规范
+- 内核里面每一层代码都会遵守 electron 规范，按不同环境细分文件夹:
+	- common: 公共的 js方法，在哪里都可以运行的
+	- browser: 只使用浏览器 API 的代码，可以调用 common
+	- node: 只使用 NodeJS API 的代码，可以调用 common
+	- electron-browser: 使用 electron 渲染线程和浏览器 API 的代码，可以调用 common，browser，node
+	- electron-main: 使用 electron 主线程和 NodeJS API 的代码，可以调用 common， node
+	- test: 测试代码
+	- electron-sandbox：是用于desktop的一些方法，这里面除了有渲染进程所依赖的内容方法之外，还有共享进程、工具进程所依赖的一些方法，需要进行甄别。
+- # 7.  VSCode构建说明
+- ## 7.1.  Windows平台
+- ### 7.1.1.  编译工具准备
+- Nodejs：最新VsCode代码官方要求Node.JS版本 >=18.15.x and <19
+- Yarn：官方要求Yarn版本号 >=1.10.1 and <2。需要全局安装
+- Python：Python的版本需要安装>=3.6以上的版本，确保要完整的安装python。
+- node-gyp：使用命令安装node-gyp：npm install node-gyp --global。
+- ternary-stream：使用命令安装ternary-stream：npm install ternary-stream --global
+- windows-build-tools：使用npm install --global windows-build-tools命令安装会失败；但在失败后C:\Users\xxx\.windows-build-tools下有安装文件vs_BuildTools，直接运行此文件，安装2017版本VS编译环境，选择如下两个安装项目：
+  
+  ![](../../assets/VSCode解析/020_1702090398293-d1658fe6-79d7-4b90-9fbb-1102eeaba9d6.png)
+	- 另外，如果在后面的过程中出现了Warning MSB8038和Fatal error LINK1181的问题，需要在这个阶段安装一下一个单个组件。
+	  
+	  ![](../../assets/VSCode解析/021_1702090578353-1442c3d4-d9e7-4447-9127-1fac13e58ce4.png)
+- ### 7.1.2.  编译过程
+- 另外打开一个cmd窗口，进入vscode代码目录，执行yarn命令。第一次的话这个过程时间比较长，且需要翻墙。上述提到的问题也可能在这个阶段发生。这个阶段其实是在下载项目所需要的代码库。如果向加快速度，可以将yarn.lock中的国外地址改为国内的yarn源地址即可。
+- 完成之后，执行命令 **yarn run watch **进行编译，过程可能会较久，也可以执行**yarn compile**。编译完成后显示如下：
+  
+  ![](../../assets/VSCode解析/022_1702090722496-3ca01944-3d18-47b6-ad09-e6edda03c5f9.png)
+- 不要关闭此窗口。
+- 运行VSCode的代码。另外起cmd命令窗，在代码目录下执行 .\scripts\code.bat 命令，结果如下：
+  
+  ![](../../assets/VSCode解析/023_1702090762965-2af1c7ea-145e-4c5f-949d-4c32d15145d1.png)
+  
+  ![](../../assets/VSCode解析/024_1702090767731-e1825163-375e-4023-8b08-1cb8b807e03b.png)
+- ### 7.1.3.  打包过程
+- 1. 安装打包工具 gulp ：npm install gulp -g
+- 2. 自研插件使用 yarn 命令下载依赖，不要使用 npm install，否则在编译绿色可执行文件时会出现依赖包异常；
+- 3. 拷贝插件完成后，在VsCode源码目录中重新执行 yarn、yarn run watch及运行.\scripts\code.bat，看下插件是否编译进去了；
+- 4. 在源码目录下，执行 yarn gulp vscode-win32-x64 命令，该命令会在与源码同目录下生成一个VSCode-win32-x64 文件夹，其中有个 Code - OSS.exe 绿色免安装文件，双击即可运行；该命令执行时间会比较长，耐心等待；
+  
+  ![](../../assets/VSCode解析/025_1702090860935-22d20234-9394-4110-bcdb-293be5bd3590.png)
+- 5. 完成步骤3后，在源码目录下执行命令yarn gulp vscode-win32-x64-inno-updater，该命令会在VSCode-win32-x64安装可安装文件所需要的工具，在tools目录下；
+  
+  ![](../../assets/VSCode解析/026_1702090854457-84c4f12d-a13c-4315-b324-88b196789008.png)
+- 6. 完成步骤4后，在源码目录下执行命令yarn gulp vscode-win32-x64-user-setup ，会在.build\win32-x64\user-setup目录下出现VSCodeSetup.exe安装文件，双击即可安装。
+- ## 7.2.  Linux平台-Debian/Ubuntu
+- ### 7.2.1.  编译工具准备
+- 首先基于6.1.1节的内容安装（windows-build-tools除外）。在linux的平台下，需要再安装一些C++的工具。
+- 在linux的环境下，还需要安装一些编译所用的包或模块。
+- 命令为：（这个命令是针对debian系列内核的）
+	- sudo apt-get install build-essential g++ libx11-dev libxkbfile-dev libsecret-1-dev python-is-python3
+- 如果出现定位不到python-is-python3包，那就不安装这个包。
+- 如果在yarn的时候，出现以下的问题时，安装一下libkrb5-dev这个包
+  
+  ![](../../assets/VSCode解析/027_1707272975054-b1560640-623b-4e3e-8530-3735e3e36004.png)
+	- sudo apt-get install libkrb5-dev
+- 在linux环境下安装python可以参考：
+  
+  [https://blog.csdn.net/wudi1107/article/details/123715139?ops_request_misc=%257B%2522request%255Fid%2522%253A%2522170606330816800188551900%2522%252C%2522scm%2522%253A%252220140713.130102334.pc%255Fall.%2522%257D&request_id=170606330816800188551900&biz_id=0&utm_medium=distribute.pc_search_result.none-task-blog-2~all~first_rank_ecpm_v1~rank_v31_ecpm-4-123715139-null-null.142^v99^pc_search_result_base5&utm_term=debian%20%E5%AE%89%E8%A3%85python3&spm=1018.2226.3001.4187](https://blog.csdn.net/wudi1107/article/details/123715139?ops_request_misc=%257B%2522request%255Fid%2522%253A%2522170606330816800188551900%2522%252C%2522scm%2522%253A%252220140713.130102334.pc%255Fall.%2522%257D&request_id=170606330816800188551900&biz_id=0&utm_medium=distribute.pc_search_result.none-task-blog-2~all~first_rank_ecpm_v1~rank_v31_ecpm-4-123715139-null-null.142%5ev99%5epc_search_result_base5&utm_term=debian%20%E5%AE%89%E8%A3%85python3&spm=1018.2226.3001.4187)
+- ### 7.2.2.  编译打包过程
+- 和windows平台一样，需要首先执行yarn、yarn compile这两个命令。待顺利通过之后，再执行后续的一些命令。
+- 不知道gulp有什么任务命令可以通过执行yarn run gulp --tasks来查看有什么样的命令
+- 在编译之前，需要修改一下vscode/build/linux/dependencies-generator.ts文件内的第89行。直接将第89行注释掉。如果已经生成了js文件，那就在对应的dependencies-generator.js中将该行注释掉。这里注掉的原因就是，如果不注掉，那么会导致打包失败，因为没办法复现vscode官方的打包环境。
+- 然后进入到项目的根目录下，顺序执行以下的命令：（下列命令中的yarn run gulp和gulp这两种可以相互代替，使用gulp的前提是已经全局安装了gulp这个工具）
+	- yarn run gulp vscode-linux-x64
+	- yarn run gulp vscode-linux-x64-prepare-deb
+	- yarn run gulp vscode-linux-x64-build-deb
+- 如果要编译的是linux的server版，直接执行一条就可以了：
+	- yarn run gulp vscode-reh-web-linux-x64
+- 在执行了prepare-deb之后，会在项目根目录下的.build/linux/deb/amd64下产生一个vscode-amd64的文件夹，这就是DEB包在打包压缩之前的形态。执行了build-deb命令之后，会在项目根目录下的.build/linux/deb/amd64/deb看到打完包的deb包。在gulp vscode-linux-x64执行完之后，会在项目代码的同级目录下生成一个linux的绿色版，直接进入到该目录下执行对应的脚本就可以启动了。
+- ## 7.3.  MacOS平台
+- ### 7.3.1.  编译工具准备
+- 在Macos下要准备的起始很简单，首先基于6.1.1节的内容安装（windows-build-tools除外），然后再Maxos的机子里再安装一个xcode就可以了。
+- ### 7.3.2.  编译打包过程
+- 和windows平台一样，需要首先执行yarn、yarn compile这两个命令。待顺利通过之后，再执行后续的一些命令。
+- 然后进入到项目的根目录下，顺序执行以下的命令：（下列命令中的yarn run gulp和gulp这两种可以相互代替，使用gulp的前提是已经全局安装了gulp这个工具）
+	- yarn run gulp vscode-darwin-x64
+	- yarn run gulp vscode-darwin-arm64
+- 只需要执行这两条命令就可以了。这里需要注意的是，如果要更换图标，需要将png的图标转化为icns图标。
+- ## 7.4.  注意点
+- 在打包的过程中，曾经因为一些原因删除了yarn.lock这个文件，然后重新yarn。会出现在yarn compile的过程中，报错导致打包过程中断的情况发生。这里的绝大部分原因是引用了很多的包之后，导致的包的新版本之间的冲突。这时候，可以直接使用vscode源码中的yarn.lock就可以规避这个问题。
+- ## 7.5.  小结
+- 从明白和理解VSCode的打包过程可以看出来，VSCODE的设计是相当紧凑和精巧的。通过不同的gulp打包任务的组合，可以打出vscode的web、windows、linux、macos版。从形式上来说，基本上兼顾了所有的编辑器的场景，并且结合SSH现成的技术，实现了远端操作项目的目的。
+- 理解vscode也可以从打包开始，找到每种形式的开端，也是可以慢慢花时间去理解vscode的源码结构。
+- # 8.  VSCode关键代码解析
+- ## 8.1.  共享进程
+- Shared Process的启动是通过闭包实现的。在入口的app.ts中有一段这样的代码
+  
+  ```
+  // Shared process
+  // 共享进程的启动准备和客户端相关的函数方法
+  const { sharedProcessReady, sharedProcessClient } = this.setupSharedProcess(machineId, sqmId);
+  ```
+- 上述代码就是共享进程的启动准备和客户端相关的方法。
+- 共享进程的具体创建方法如下：
+  
+  ```
+  private setupSharedProcess(machineId: string, sqmId: string): { sharedProcessReady: Promise<MessagePortClient>; sharedProcessClient: Promise<MessagePortClient> } {
+  // 构建一个共享进程，并且在共享进程中构建一个IPCServer
+  const sharedProcess = this._register(this.mainInstantiationService.createInstance(SharedProcess, machineId, sqmId));
+  
+  const sharedProcessClient = (async () => {
+  	this.logService.trace('Main->SharedProcess#connect');
+  
+  	// 链接共享进程
+  	// 返回的是一个electron的原生对象MessagePortMain
+  	const port = await sharedProcess.connect();
+  
+  	this.logService.trace('Main->SharedProcess#connect: connection established');
+  
+  	return new MessagePortClient(port, 'main');
+  })();
+  
+  const sharedProcessReady = (async () => {
+  	await sharedProcess.whenReady();
+  
+  	return sharedProcessClient;
+  })();
+  
+  return { sharedProcessReady, sharedProcessClient };
+  }
+  ```
+	- 上面的代码主要就是两个功能，一个就是返回一个共享进程的客户端，也就是可以和共享进程进行通信的通信桥对象；另外一个就是等待共享进程准备好了之后，就返回上述客户端的功能。
+	- 可以看到上述代码中，还有一个whenReady的方法，这个方法的具体内容为：
+- ## 8.2.  渲染进程加载页面
+- 在 5.3 节中讲述了vscode进程架构。这一小节主要讲述渲染进程是如何加载出对应页面的。
+- 在源码中，一般会使用createBrowserWindow这个electron的api来创建渲染进程。也仅有electron-main进程可以创建渲染进程（render process）。
+- 例如：issueExplore渲染进程的创建
+  
+  ```
+  const issueReporterDisposables = new DisposableStore();
+  
+  		const issueReporterWindowConfigUrl = issueReporterDisposables.add(this.protocolMainService.createIPCObjectUrl<IssueReporterWindowConfiguration>());
+  		const position = this.getWindowPosition(this.issueReporterParentWindow, 700, 800);
+  
+  		this.issueReporterWindow = this.createBrowserWindow(position, issueReporterWindowConfigUrl, {
+  			backgroundColor: data.styles.backgroundColor,
+  			title: localize('issueReporter', "Issue Reporter"),
+  			zoomLevel: data.zoomLevel,
+  			alwaysOnTop: false
+  		}, 'issue-reporter');
+  
+  		// Store into config object URL
+  		issueReporterWindowConfigUrl.update({
+  			appRoot: this.environmentMainService.appRoot,
+  			windowId: this.issueReporterWindow.id,
+  			userEnv: this.userEnv,
+  			data,
+  			disableExtensions: !!this.environmentMainService.disableExtensions,
+  			os: {
+  				type: type(),
+  				arch: arch(),
+  				release: release(),
+  			},
+  			product
+  		});
+  		this.issueReporterWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+  			callback({ responseHeaders: { ...details.responseHeaders, 'Access-Control-Allow-Headers': ['Cookie', 'Content-Type'], 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Origin': ['vscode-file://vscode-app'] } })
+  		});
+  		this.issueReporterWindow.webContents.session.webRequest.onBeforeSendHeaders(
+  			(details, callback) => {
+  				callback({ requestHeaders: { Origin: '*', ...details.requestHeaders } });
+  			},
+  		);
+  		//this.issueReporterWindow.webContents.session.webRequest
+  		this.issueReporterWindow.loadURL(
+  			FileAccess.asBrowserUri(`vs/code/electron-sandbox/issue/issueReporter${this.environmentMainService.isBuilt ? '' : '-dev'}.html`).toString(true)
+  		);
+  
+  		this.issueReporterWindow.on('close', () => {
+  			this.issueReporterWindow = null;
+  
+  			issueReporterDisposables.dispose();
+  		});
+  
+  		this.issueReporterParentWindow.on('closed', () => {
+  			if (this.issueReporterWindow) {
+  				this.issueReporterWindow.close();
+  				this.issueReporterWindow = null;
+  
+  				issueReporterDisposables.dispose();
+  			}
+  		});
+  ```
+- 其中，createBrowserWindow是创建渲染进程的具体操作方法。这里面确定了该进程的一些基本配置参数。
+- issueReporterWindowConfigUrl参数存放了初始化的配置参数。
+- 真正开始加载的方法是loadURL
+- loadURL方法中填入的参数是将一个html文件作为浏览器文件放入到window中。
+- 接下来看一下上述例子中导入的html
+  
+  ```
+  <!-- Copyright (C) Microsoft Corporation. All rights reserved. -->
+  <!DOCTYPE html>
+  <html>
+  <head>
+  <meta charset="utf-8" />
+  <!-- <meta
+  	http-equiv="Content-Security-Policy"
+  	content="
+  		default-src
+  			'none'
+  		;
+  		img-src
+  			'self'
+  			data:
+  		;
+  		script-src
+  			'self'
+  		;
+  		style-src
+  			'self'
+  			'unsafe-inline'
+  		;
+  		connect-src
+  			'self'
+  			https:
+  		;
+  		font-src
+  			'self'
+  		;
+  "> -->
+  <style>
+  	body {
+  		display: none
+  	}
+  </style>
+  </head>
+  
+  <body aria-label="">
+  </body>
+  
+  <!-- Startup (do not modify order of script tags!) -->
+  <script src="issueReporter.js"></script>
+  </html>
+  ```
+- 这是一个正式环境（生产环境）下的html。还有一个是dev环境下（开发环境）下的html。两者之间差了以下的几行。
+  
+  ```
+  <script src="../../../../bootstrap.js"></script>
+  <script src="../../../../vs/loader.js"></script>
+  <script src="../../../../bootstrap-window.js"></script>
+  ```
+- 这几个文件会在打包的时候，打包成一个文件。即生产环境中的那个js文件。但是在调试环境下，还是需要引入上面的几个文件，因为这是vscode的一种开发规范。
+- 再看一下，对应的js文件中的内容
+  
+  ```
+  /*---------------------------------------------------------------------------------------------
+  *  Copyright (c) Microsoft Corporation. All rights reserved.
+  *  Licensed under the MIT License. See License.txt in the project root for license information.
+  *--------------------------------------------------------------------------------------------*/
+  
+  //@ts-check
+  (function () {
+  'use strict';
+  
+  const bootstrapWindow = bootstrapWindowLib();
+  
+  // Load issue reporter into window
+  bootstrapWindow.load(['vs/code/electron-sandbox/issue/issueReporterMain'], function (issueReporter, configuration) {
+  return issueReporter.startup(configuration);
+  },
+  {
+  	configureDeveloperSettings: function () {
+  		return {
+  			forceEnableDeveloperKeybindings: true,
+  			disallowReloadKeybinding: true
+  		};
+  	}
+  }
+  );
+  
+  /**
+  * @typedef {import('../../../base/parts/sandbox/common/sandboxTypes').ISandboxConfiguration} ISandboxConfiguration
+  *
+  * @returns {{
+  *   load: (
+  *     modules: string[],
+  *     resultCallback: (result, configuration: ISandboxConfiguration) => unknown,
+  *     options?: {
+  *       configureDeveloperSettings?: (config: ISandboxConfiguration) => {
+  * 			forceEnableDeveloperKeybindings?: boolean,
+  * 			disallowReloadKeybinding?: boolean,
+  * 			removeDeveloperKeybindingsAfterLoad?: boolean
+  * 		 }
+  *     }
+  *   ) => Promise<unknown>
+  * }}
+  */
+  function bootstrapWindowLib() {
+  // @ts-ignore (defined in bootstrap-window.js)
+  return window.MonacoBootstrapWindow;
+  }
+  }());
+  ```
+- 主要的逻辑就在第13-15行。这里面就点明了这个渲染进程中会加载哪个文件。并且在加载之后，会执行该文件中的startup函数。因此，需要我们在定义这个文件的时候，在这个文件中一定需要定义一个startup函数，而且还要export出来。也就意味着startup函数就是这个渲染进程的主函数。configuration参数就是这个主函数的参数。需要与issueReporterWindowConfigUrl参数对应起来。
+- 在对应的startup中就可以添加对应的事件添加，事件响应相关的函数。
+- # 9.  VSCode插件开发实践
+- ## 9.1.  第一个插件
+  
+  在开始开发VSCode之前，需要安装Nodejs。Nodejs的安装在Windows上比较简单，只需要从官网上下载安装。
+  
+  Nodejs中文官网：[https://nodejs.org/zh-cn](https://nodejs.org/zh-cn)
+- 在安装完nodejs之后，需要安装yeoman和vscode generator这两个模块
+  
+  ```
+  npm install -g yo generator-code
+  ```
+- 然后新建一个文件夹，输入以下命令构建一个默认的项目
+  
+  ```
+  yo code
+  
+  # ? What type of extension do you want to create? New Extension (TypeScript)
+  # ? What's the name of your extension? HelloWorld
+  ### Press <Enter> to choose default for all options below ###
+  
+  # ? What's the identifier of your extension? helloworld
+  # ? What's the description of your extension? LEAVE BLANK
+  # ? Initialize a git repository? Yes
+  # ? Bundle the source code with webpack? No
+  # ? Which package manager to use? npm
+  
+  # ? Do you want to open the new folder with Visual Studio Code? Open with `code`
+  ```
+- 然后用vscode打开这个项目，按**F5**进入调试。
+- 使用 **Ctrl+Shift+P **命令打开命令行。输入 **Hello World **，点击就可以看到效果。
+- 注意：如果在创建项目时，出现了以下问题。可以通过使用管理员权限在shell中输入  **set-ExecutionPolicy RemoteSigned **来解决问题。
+  
+  ![](../../assets/VSCode解析/028_1695225724102-2942f4fc-dcb4-410e-a66f-6d94bf998bef.png)
+- ## 9.2.  使用React开发WebView
+- React相关的框架说白了其实就是将虚拟DOM转化为真实DOM的一系列的js文件。因此，如果想要将react引入到vscode插件中去，需要做两步：第一步，开发一个React的前端项目，主要处理前端的节点和路由相关的内容。第二步，将入口文件作为一个地址传给前端的页面。
+- 可以设置一个Provider，一个页面的tsx。
+- ```
+  let webviewPanel;
+  
+  export function initCommon(context: vscode.ExtensionContext) {
+  
+    if (webviewPanel) {
+      webviewPanel.dispose();
+    }
+  
+    webviewPanel = vscode.window.createWebviewPanel(
+      'React',
+      '团队协作',
+      vscode.ViewColumn.One,
+      {
+        retainContextWhenHidden: true, // 保证 Webview 所在页面进入后台时不被释放
+        enableScripts: true // 运行 JS 执行
+      }
+    );
+  
+    const filePath = vscode.Uri.file(
+      path.join(context.extensionPath, 'out', 'common.js')
+    );
+    const srcUrl = webviewPanel.webview.asWebviewUri(filePath).toString();
+    // webview->extension
+    webviewPanel.webview.onDidReceiveMessage(
+      // 监听从后端返回的信息
+      ()=>{}, null
+    )
+    webviewPanel.webview.html = getWebviewContent(srcUrl);
+    webviewPanel.onDidDispose(() => {
+      // When the panel is closed, dispose of the currentPanel variable
+      webviewPanel = undefined;
+    });
+  }
+  
+  // extension->webview
+  export function postMessageToCommon(message: any) {
+    webviewPanel.webview.postMessage(message);
+  }
+  
+  function getWebviewContent(srcUri: string) {
+    return `<!doctype html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>webview-react</title>
+        <script defer="defer" src="${srcUri}"></script>
+      </head>
+      <body>
+      <script>    const vscode = acquireVsCodeApi();</script>
+        <div id="root"></div>
+      </body>
+      </html>`;
+  }
+  ```
+  
+  ```
+  import React from 'react'
+  
+  function Common() {
+    return (
+      <div>Common</div>
+    )
+  }
+  
+  export default Common
+  ```
+- 这里我还使用了webpack，将一系列的tsx转化为一个js。这里需要将extension和webview的代码分开，不能混淆在一起，因为两者的环境是不一样的。
+- ## 9.3.  Hover使用方法
+- 具体的参考可以查看vscode api中的registerHoverProvider方法。
+- [https://code.visualstudio.com/api/references/vscode-api#languages](https://code.visualstudio.com/api/references/vscode-api#languages)
+- 这里主要讲的就是关于如何在hover中向调用的command传递参数。
+- 添加一个接口来定义args的形状
+  
+  ```
+  interface ISayHelloArgs {
+  msg: string;
+  }
+  ```
+- 然后，注册命令使用这个接口(您得到一个对象'args')
+  
+  ```
+  context.subscriptions.push(
+    vscode.commands.registerCommand("say_hello", async (args: ISayHelloArgs) => {
+      vscode.window.showInformationMessage(args.msg + ' greetz at ' + new Date());
+    })
+  );
+  ```
+- 注册的HoverProvider然后使用JSON字符串的encodeURI版本构建args。
+  
+  ```
+  vscode.languages.registerHoverProvider(selector, {
+    provideHover(
+      doc: vscode.TextDocument,
+      pos: vscode.Position,
+      token: vscode.CancellationToken
+    ): vscode.ProviderResult<vscode.Hover> {
+      return new Promise<vscode.Hover>((resolve, reject) => {
+        const args: ISayHelloArgs = { msg: 'hello' };
+        const jsonArgs = JSON.stringify(args);
+        const hoverMarkup = `[Greetings...](command:say_hello?${encodeURI(jsonArgs)})`;
+        if (hoverMarkup) {
+          const mdstring = new vscode.MarkdownString(hoverMarkup);
+          mdstring.isTrusted = true; // NOTE: this is needed to execute commands!!
+          resolve(new vscode.Hover(mdstring));
+        } else {
+          reject();
+        }
+      }
+      );
+    },
+  });
+  ```
+- 其中provideHover方法中的几个函数，分别就是代表了document文档对象，position光标位置以及取消的Token。
+- ## 9.4.  CodeLens的使用
+- CodeLens就是在editor上会在正式的文本中间出现一些类似提示词一样的内容。
+- CodeLens主要可以通过implements vscode的CodeLensProvider来实现。
+  
+  ```
+  class TestLensProvider implements vscode.CodeLensProvider {
+  
+    private readonly RUN_TEST_LENS_TITLE = '$(run) Run Test With Coverage';
+  
+    private map: Map<string, vscode.CodeLens[]> = new Map<string, vscode.CodeLens[]>();
+  
+      private createCodeLens(lineNumber: number): vscode.CodeLens {
+        const codeLens = new vscode.CodeLens(new vscode.Range(lineNumber, 0, lineNumber + 1, 0));
+        codeLens.command = {
+            title: this.RUN_TEST_LENS_TITLE,
+            command: '',
+            arguments: []
+        };
+        return codeLens;
+    }
+  
+    // vscode.CodeLensProvider 接口必须要实现的方法
+    provideCodeLenses(document: vscode.TextDocument, token: vscode.CancellationToken): vscode.CodeLens[] | Thenable<vscode.CodeLens[]> {
+        return new Promise<vscode.CodeLens[]>((resolve) => {
+            // document.fileName是绝对路径地址
+            let filename = document.fileName;
+            resolve(this.map.get(filename) ?? []);
+        });
+    }
+  
+  }
+  ```
+- 上述代码中的$(run)部分，在渲染的时候，就会被渲染成一个启动一样的小图标。如果注册的CodeLens中，command部分的命令没有被注册，那么这个就不会被启动命令执行。
+- ## 9.5.  DecorationType的使用
+- DecorationType的运用很简单，直接可以通过editor的setDecoration就可以使用。
+- DecorationType可以被称为是editor上的样式渲染。可以对editor上的任何一个位置进行样式上的改变和装饰。
+- 如果我想要为某个段落加个装饰，可以通过以下的代码来实现：
+  
+  ```
+  currentFileEditor.setDecorations(this.stateDecorationTypes.passed, passedRanges);
+  ```
+	- 这个方法的第一个参数就是装饰样式的定义，是一个vscode.TextEditorDecorationType类，第二个参数是一个vscode.Range的数组。
+- 如果我想让对应的样式消失，可以通过以下代码来实现：
+  
+  ```
+  currentFileEditor.setDecorations(this.stateDecorationTypes.passed, []);
+  ```
+- # 10.  其他设计实践
+- ## 10.1.  Web Shell/Remote Shell设计
+- [Web Shell的设计与实现](../桌面应用/Web%20Shell的设计与实现.md)
+- ## 10.2.  Open VSX
+- Open VSX是一个供应商中立的开源替代品,用于Visual Studio Marketplace。它提供了一个管理VS Code扩展的服务器应用程序、一个类似于VS Code Marketplace的Web应用程序,以及一个类似于vsce的用于发布扩展的命令行工具。官方链接：[https://open-vsx.org/](https://open-vsx.org/)
+  
+  ![](../../assets/VSCode解析/029_1729221674600-6c9d95fb-176c-4947-80ae-974c7f21c774.png)
+- 最大的作用就是用于代替微软的vscode插件市场。也可以做私有部署。
+- ### 10.2.1.  部署
+- 部署使用的docker部署的。直接使用docker-compose进行部署就可以了。
+- docker-compose.yaml
+  
+  ```
+  version: '3.8'
+  
+  services:
+  
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: openvsx
+      POSTGRES_PASSWORD: openvsx
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+    ports:
+      - '5432:5432'
+  
+  elasticsearch:
+    image: elasticsearch:8.7.1
+    environment:
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    ports:
+      - 9200:9200
+      - 9300:9300
+    healthcheck:
+      test: curl -s http://elasticsearch:9200 >/dev/null || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 50
+      start_period: 5s
+  
+  kibana:
+    image: kibana:8.7.1
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    profiles:
+      - kibana
+  
+  server:
+    image: openjdk:17
+    working_dir: /app
+    command: sh -c 'scripts/generate-properties.sh --docker && ./gradlew assemble && ./gradlew runServer'
+    volumes:
+      - ./server:/app
+    ports:
+      - 8080:8080
+    depends_on:
+      - postgres
+      - elasticsearch
+    healthcheck:
+      test: "curl --fail --silent localhost:8081/actuator/health | grep UP || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 50
+      start_period: 5s
+    profiles:
+      - openvsx
+      - backend
+  
+  webui:
+    image: node:18
+    working_dir: /app
+    command: sh -c 'yarn && yarn build && yarn build:default && yarn start:default'
+    volumes:
+      - ./webui:/app
+    ports:
+      - 3000:3000
+    depends_on:
+      - server
+    profiles:
+      - openvsx
+      - frontend
+  
+  cli:
+    image: node:18
+    working_dir: /app
+    command: sh -c 'yarn && yarn watch'
+    volumes:
+      - ./cli:/app
+    depends_on:
+      - server
+    environment:
+      - OVSX_REGISTRY_URL=http://server:8080
+    profiles:
+      - openvsx
+      - commandline
+  ```
+- 然后使用某个命令启动Docker服务
+  
+  ```
+  docker compose --profile openvsx --profile kibana up
+  ```
+- 因为openvsx需要用到https，所以会涉及到证书的问题。
+- 如果是自己内部使用或者测试，可以生成一个自签名证书，然后在nginx中添加该证书。
+  
+  ```
+  docker run --rm -it -e CERT_DNS="192.168.23.181" -v $(pwd)/certs:/ssl soulteary/certs-maker
+  ```
+- 将证书复制到nginx配置目录里：
+  
+  ```
+  sudo mkdir -p /etc/nginx/ssl
+  sudo cp $(pwd)/certs/192.168.23.181.crt /etc/nginx/ssl/
+  sudo cp $(pwd)/certs/192.168.23.181.key /etc/nginx/ssl/
+  ```
+- 配置Nginx
+	- 注：下面的192.168.23.181地址是示例地址，需要切换成真正部署的地址。
+	- 创建和编辑站点配置
+	  
+	  ```
+	  sudo nano /etc/nginx/sites-available/openvsx
+	  ```
+	- 配置文件
+	  
+	  ```
+	  # 处理端口 80 上的 HTTP 请求
+	  server {
+	   listen 80;
+	   server_name 192.168.23.181;
+	  
+	   # 将所有 HTTP 请求重定向到 HTTPS
+	   location / {
+	       return 301 https://$host$request_uri;
+	   }
+	  }
+	  
+	  # 处理端口 443 上的 HTTPS 请求
+	  server {
+	   listen 443 ssl;
+	   server_name 192.168.23.181;
+	  
+	   ssl_certificate /etc/nginx/ssl/192.168.23.181.crt;
+	   ssl_certificate_key /etc/nginx/ssl/192.168.23.181.key;
+	   ssl_protocols TLSv1.2 TLSv1.3;
+	   ssl_prefer_server_ciphers on;
+	  
+	   location / {
+	       proxy_pass http://192.168.23.181:8082;
+	       proxy_set_header Host $host;
+	       proxy_set_header X-Forwarded-Host $host;
+	       proxy_set_header X-Real-IP $remote_addr;
+	       proxy_set_header X-Forwarded-Proto $scheme;
+	   }
+	  }
+	  ```
+	- 创建符号链接并重新加载Nginx
+	  
+	  ```
+	  sudo ln -s /etc/nginx/sites-available/openvsx /etc/nginx/sites-enabled/
+	  sudo nginx -t
+	  sudo systemctl reload nginx
+	  ```
+	- 检查和更新配置
+	  
+	  ```
+	  sudo grep -r '192.168.23.181' /etc/nginx/
+	  sudo mv /etc/nginx/sites-available/192.168.23.181.conf /etc/nginx/sites-available/192.168.23.181.conf.disabled
+	  sudo rm /etc/nginx/sites-enabled/192.168.23.181.conf
+	  sudo ln -s /etc/nginx/sites-available/openvsx /etc/nginx/sites-enabled/
+	  sudo nginx -t
+	  sudo systemctl reload nginx
+	  ```
+	- 测试上传插件
+	  
+	  ```
+	  docker compose exec cli yarn load-extensions n
+	  ```
+- ### 10.2.2.  发布插件
+- 检查ovsx版本
+  
+  ```
+  ovsx --version
+  ```
+- 启动服务并发布插件
+  
+  ```
+  docker ps
+  export OVSX_REGISTRY_URL=http://localhost:8080
+  export OVSX_PAT=super_token
+  export PUBLISHERS="DotJoshJohnson eamodio felixfbecker formulahendry HookyQR ms-azuretools ms-mssql ms-python ms-vscode octref redhat ritwickdey sburg vscode vscodevim Wscats"
+  
+  for pub in $PUBLISHERS; do
+    cli/lib/ovsx create-namespace $pub
+  done
+  
+  export OVSX_REGISTRY_URL=http://localhost:8080
+  export OVSX_PAT=super_token
+  
+  npx ovsx create-namespace redhat
+  export OVSX_REGISTRY_URL=http://localhost:8082
+  npx ovsx create-namespace red
+  npx ovsx publish redhat.vscode-yaml-0.10.1.vsix
+  ```
+- ### 10.2.3.  配置vscode
+- 直接修改vscode应用程序下的product.json的内容就可以连上。
+  
+  ```
+  {
+  "extensionsGallery": {
+    "nlsBaseUrl": "https://www.vscode-unpkg.net/_lp/",
+    "serviceUrl": "https://192.168.23.181:443/vscode/gallery",
+    "itemUrl": "https://192.168.23.181:443/vscode/item",
+    "publisherUrl": "https://marketplace.visualstudio.com/publishers",
+    "resourceUrlTemplate": "https://{publisher}.vscode-unpkg.net/{publisher}/{name}/{version}/{path}",
+    "controlUrl": "https://az764295.vo.msecnd.net/extensions/marketplace.json"
+  },
+  "linkProtectionTrustedDomains": [
+    "https://*.visualstudio.com",
+    "https://*.microsoft.com",
+    "https://aka.ms",
+    "https://*.gallerycdn.vsassets.io",
+    "https://*.github.com",
+    "https://login.microsoftonline.com",
+    "https://*.vscode.dev",
+    "https://*.github.dev",
+    "https://gh.io",
+    "https://portal.azure.com",
+    "https://raw.githubusercontent.com",
+    "https://private-user-images.githubusercontent.com",
+    "https://avatars.githubusercontent.com",
+    "https://192.168.23.181"
+  ]
+  }
+  ```
+- ### 10.2.4.  参考资料
+  
+  openvsx官方github地址：[https://github.com/eclipse/openvsx](https://github.com/eclipse/openvsx)
+-
